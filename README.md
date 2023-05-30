@@ -36,3 +36,4 @@ repository.
 ## Documentation
 
 To learn more, check out the full [documentation](https://swiftpackageindex.com/apple/swift-openapi-urlsession/documentation).
+
