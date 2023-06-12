@@ -90,7 +90,18 @@ public struct URLSessionTransport: ClientTransport {
     }
 
     private func invokeSession(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
-        #if canImport(FoundationNetworking)
+    #if canImport(FoundationNetworking)
+        return try await performDataTask(with: urlRequest)
+    #else
+        if #available(iOS 15.0, *) {
+            return try await configuration.session.data(for: urlRequest)
+        } else {
+            return try await performDataTask(with: urlRequest)
+        }
+    #endif
+    }
+    
+    private func performDataTask(with urlRequest: URLRequest) async throws -> (Data, URLResponse) {
         return try await withCheckedThrowingContinuation { continuation in
             configuration.session
                 .dataTask(with: urlRequest) { data, response, error in
@@ -104,9 +115,6 @@ public struct URLSessionTransport: ClientTransport {
                 }
                 .resume()
         }
-        #else
-        return try await configuration.session.data(for: urlRequest)
-        #endif
     }
 }
 
