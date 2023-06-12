@@ -93,7 +93,7 @@ public struct URLSessionTransport: ClientTransport {
     #if canImport(FoundationNetworking)
         return try await performDataTask(with: urlRequest)
     #else
-        if #available(iOS 15.0, *) {
+        if #available(macOS 12.0, iOS 15.0, watchOS 8.0, tvOS 15.0, *) {
             return try await configuration.session.data(for: urlRequest)
         } else {
             return try await performDataTask(with: urlRequest)
