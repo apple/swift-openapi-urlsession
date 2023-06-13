@@ -179,7 +179,7 @@ extension URLSessionTransportError: CustomStringConvertible {
         case .notHTTPResponse(let response):
             return "Received a non-HTTP response, of type: \(String(describing: type(of: response)))"
         case .noResponse(let url):
-            return "Received a nil response for \(url?.absoluteString ?? "")"
+            return "Received a nil response for \(url?.absoluteString ?? "<nil URL>")"
         }
     }
 }
