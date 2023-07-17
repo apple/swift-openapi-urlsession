@@ -15,6 +15,17 @@
 import Foundation
 import PackageDescription
 
+// General Swift-settings for all targets.
+var swiftSettings: [SwiftSetting] = []
+
+#if swift(>=5.9)
+swiftSettings.append(
+    // https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md
+    // Require `any` for existential types.
+    .enableUpcomingFeature("ExistentialAny")
+)
+#endif
+
 let package = Package(
     name: "swift-openapi-urlsession",
     platforms: [
@@ -35,11 +46,13 @@ let package = Package(
             name: "OpenAPIURLSession",
             dependencies: [
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
-            ]
+            ],
+            swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "OpenAPIURLSessionTests",
-            dependencies: ["OpenAPIURLSession"]
+            dependencies: ["OpenAPIURLSession"],
+            swiftSettings: swiftSettings
         ),
     ]
 )
