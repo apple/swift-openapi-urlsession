@@ -13,9 +13,18 @@
 //===----------------------------------------------------------------------===//
 import XCTest
 import OpenAPIRuntime
+#if canImport(Darwin)
 import Foundation
+#else
+@preconcurrency import struct Foundation.URL
+#endif
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+@preconcurrency import struct FoundationNetworking.URLRequest
+@preconcurrency import class FoundationNetworking.URLProtocol
+@preconcurrency import class FoundationNetworking.URLSession
+@preconcurrency import class FoundationNetworking.HTTPURLResponse
+@preconcurrency import class FoundationNetworking.URLResponse
+@preconcurrency import class FoundationNetworking.URLSessionConfiguration
 #endif
 @testable import OpenAPIURLSession
 

@@ -32,8 +32,10 @@ public final class LockedValueBox<Value: Sendable>: @unchecked Sendable {
         self.value = value
     }
     public func withValue<R>(_ work: (inout Value) throws -> R) rethrows -> R {
-        try lock.withLock {
-            try work(&value)
+        lock.lock()
+        defer {
+            lock.unlock()
         }
+        return try work(&value)
     }
 }
