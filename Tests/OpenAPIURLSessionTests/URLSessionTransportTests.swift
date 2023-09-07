@@ -27,41 +27,46 @@ import Foundation
 @preconcurrency import class FoundationNetworking.URLSessionConfiguration
 #endif
 @testable import OpenAPIURLSession
+import HTTPTypes
 
 class URLSessionTransportTests: XCTestCase {
 
-    func testRequestConversion() throws {
-        let request = OpenAPIRuntime.Request(
-            path: "/hello%20world/Maria",
-            query: "greeting=Howdy",
+    func testRequestConversion() async throws {
+        let request = HTTPRequest(
+            soar_path: "/hello%20world/Maria?greeting=Howdy",
             method: .post,
             headerFields: [
-                .init(name: "X-Mumble", value: "mumble")
-            ],
-            body: Data("👋".utf8)
+                .init("X-Mumble")!: "mumble"
+            ]
         )
-        let urlRequest = try URLRequest(request, baseURL: URL(string: "http://example.com/api")!)
+        let body: HTTPBody = "👋"
+        let urlRequest = try await URLRequest(
+            request,
+            body: body,
+            baseURL: URL(string: "http://example.com/api")!
+        )
         XCTAssertEqual(urlRequest.url, URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy"))
         XCTAssertEqual(urlRequest.httpMethod, "POST")
-        XCTAssertEqual(urlRequest.allHTTPHeaderFields, ["X-Mumble": "mumble"])
+        XCTAssertEqual(urlRequest.allHTTPHeaderFields, ["x-mumble": "mumble"])
         XCTAssertEqual(urlRequest.httpBody, Data("👋".utf8))
     }
 
-    func testResponseConversion() throws {
+    func testResponseConversion() async throws {
         let urlResponse: URLResponse = HTTPURLResponse(
-            url: URL(string: "http://example.com/api/hello/Maria?greeting=Howdy")!,
+            url: URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy")!,
             statusCode: 201,
             httpVersion: "HTTP/1.1",
             headerFields: ["X-Mumble": "mumble"]
         )!
-        let response = try OpenAPIRuntime.Response(from: urlResponse, body: Data("👋".utf8))
-        XCTAssertEqual(response.statusCode, 201)
-        XCTAssertEqual(response.headerFields, [.init(name: "X-Mumble", value: "mumble")])
-        XCTAssertEqual(response.body, Data("👋".utf8))
+        let (response, responseBody) = try HTTPResponse.response(from: urlResponse, body: Data("👋".utf8))
+        XCTAssertEqual(response.status.code, 201)
+        XCTAssertEqual(response.headerFields, [.init("X-Mumble")!: "mumble"])
+        let bufferedResponseBody = try await responseBody.collectAsString(upTo: .max)
+        XCTAssertEqual(bufferedResponseBody, "👋")
     }
 
     func testSend() async throws {
-        let endpointURL = URL(string: "http://example.com/api/hello/Maria?greeting=Howdy")!
+        let endpointURL = URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy")!
         MockURLProtocol.mockHTTPResponses.withValue { map in
             map[endpointURL] = .success(
                 (
@@ -73,21 +78,23 @@ class URLSessionTransportTests: XCTestCase {
         let transport: any ClientTransport = URLSessionTransport(
             configuration: .init(session: MockURLProtocol.mockURLSession)
         )
-        let request = OpenAPIRuntime.Request(
-            path: "/hello/Maria",
-            query: "greeting=Howdy",
+        let request = HTTPRequest(
+            soar_path: "/hello%20world/Maria?greeting=Howdy",
             method: .post,
             headerFields: [
-                .init(name: "X-Mumble", value: "mumble")
+                .init("X-Mumble")!: "mumble"
             ]
         )
-        let response = try await transport.send(
+        let requestBody: HTTPBody = "👋"
+        let (response, responseBody) = try await transport.send(
             request,
+            body: requestBody,
             baseURL: URL(string: "http://example.com/api")!,
             operationID: "postGreeting"
         )
-        XCTAssertEqual(response.statusCode, 201)
-        XCTAssertEqual(response.body, Data("👋".utf8))
+        XCTAssertEqual(response.status.code, 201)
+        let bufferedResponseBody = try await responseBody.collectAsString(upTo: .max)
+        XCTAssertEqual(bufferedResponseBody, "👋")
     }
 }
 
