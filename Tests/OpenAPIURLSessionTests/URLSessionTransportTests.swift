@@ -61,7 +61,7 @@ class URLSessionTransportTests: XCTestCase {
         let (response, responseBody) = try HTTPResponse.response(from: urlResponse, body: Data("👋".utf8))
         XCTAssertEqual(response.status.code, 201)
         XCTAssertEqual(response.headerFields, [.init("X-Mumble")!: "mumble"])
-        let bufferedResponseBody = try await responseBody.collectAsString(upTo: .max)
+        let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
         XCTAssertEqual(bufferedResponseBody, "👋")
     }
 
@@ -93,7 +93,7 @@ class URLSessionTransportTests: XCTestCase {
             operationID: "postGreeting"
         )
         XCTAssertEqual(response.status.code, 201)
-        let bufferedResponseBody = try await responseBody.collectAsString(upTo: .max)
+        let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
         XCTAssertEqual(bufferedResponseBody, "👋")
     }
 }

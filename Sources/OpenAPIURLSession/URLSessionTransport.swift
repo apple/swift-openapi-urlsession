@@ -197,7 +197,7 @@ extension URLRequest {
         }
         if let body {
             // TODO: Avoid buffering, stream intead.
-            self.httpBody = try await body.collectAsData(upTo: .max)
+            self.httpBody = try await Data(collecting: body, upTo: .max)
         }
     }
 }
