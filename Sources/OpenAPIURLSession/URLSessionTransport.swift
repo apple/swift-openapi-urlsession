@@ -95,11 +95,15 @@ public struct URLSessionTransport: ClientTransport {
         body: HTTPBody?,
         baseURL: URL,
         operationID: String
-    ) async throws -> (HTTPResponse, HTTPBody) {
+    ) async throws -> (HTTPResponse, HTTPBody?) {
         // TODO: Investigate how to get bidirectional streaming working.
         let urlRequest = try await URLRequest(request, body: body, baseURL: baseURL)
         let (responseBody, urlResponse) = try await invokeSession(urlRequest)
-        return try HTTPResponse.response(from: urlResponse, body: responseBody)
+        return try HTTPResponse.response(
+            method: request.method,
+            urlResponse: urlResponse,
+            data: responseBody
+        )
     }
 
     private func invokeSession(_ urlRequest: URLRequest) async throws -> (Data, URLResponse) {
@@ -143,9 +147,10 @@ internal enum URLSessionTransportError: Error {
 
 extension HTTPResponse {
     static func response(
-        from urlResponse: URLResponse,
-        body: Data
-    ) throws -> (HTTPResponse, HTTPBody) {
+        method: HTTPRequest.Method,
+        urlResponse: URLResponse,
+        data: Data
+    ) throws -> (HTTPResponse, HTTPBody?) {
         guard let httpResponse = urlResponse as? HTTPURLResponse else {
             throw URLSessionTransportError.notHTTPResponse(urlResponse)
         }
@@ -160,12 +165,19 @@ extension HTTPResponse {
             }
             headerFields[name] = value
         }
+        let body: HTTPBody?
+        switch method {
+        case .head, .connect, .trace:
+            body = nil
+        default:
+            body = .init(data: data)
+        }
         return (
             HTTPResponse(
                 status: .init(code: httpResponse.statusCode),
                 headerFields: headerFields
             ),
-            .init(data: body)
+            body
         )
     }
 }

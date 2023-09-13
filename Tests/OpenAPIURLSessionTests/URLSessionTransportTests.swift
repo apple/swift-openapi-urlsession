@@ -58,7 +58,12 @@ class URLSessionTransportTests: XCTestCase {
             httpVersion: "HTTP/1.1",
             headerFields: ["X-Mumble": "mumble"]
         )!
-        let (response, responseBody) = try HTTPResponse.response(from: urlResponse, body: Data("👋".utf8))
+        let (response, maybeResponseBody) = try HTTPResponse.response(
+            method: .get,
+            urlResponse: urlResponse,
+            data: Data("👋".utf8)
+        )
+        let responseBody = try XCTUnwrap(maybeResponseBody)
         XCTAssertEqual(response.status.code, 201)
         XCTAssertEqual(response.headerFields, [.init("X-Mumble")!: "mumble"])
         let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
@@ -86,12 +91,13 @@ class URLSessionTransportTests: XCTestCase {
             ]
         )
         let requestBody: HTTPBody = "👋"
-        let (response, responseBody) = try await transport.send(
+        let (response, maybeResponseBody) = try await transport.send(
             request,
             body: requestBody,
             baseURL: URL(string: "http://example.com/api")!,
             operationID: "postGreeting"
         )
+        let responseBody = try XCTUnwrap(maybeResponseBody)
         XCTAssertEqual(response.status.code, 201)
         let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
         XCTAssertEqual(bufferedResponseBody, "👋")
