@@ -170,7 +170,7 @@ extension HTTPResponse {
         case .head, .connect, .trace:
             body = nil
         default:
-            body = .init(data: data)
+            body = .init(data)
         }
         return (
             HTTPResponse(
