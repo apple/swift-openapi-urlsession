@@ -184,7 +184,10 @@ extension HTTPResponse {
 
 extension URLRequest {
     init(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL) async throws {
-        guard var baseUrlComponents = URLComponents(string: baseURL.absoluteString) else {
+        guard
+            var baseUrlComponents = URLComponents(string: baseURL.absoluteString),
+            let requestUrlComponents = URLComponents(string: request.path ?? "")
+        else {
             throw URLSessionTransportError.invalidRequestURL(
                 path: request.path ?? "<nil>",
                 method: request.method,
@@ -192,9 +195,9 @@ extension URLRequest {
             )
         }
 
-        let path = String(request.soar_pathOnly)
+        let path = requestUrlComponents.percentEncodedPath
         baseUrlComponents.percentEncodedPath += path
-        baseUrlComponents.percentEncodedQuery = request.soar_query.map(String.init)
+        baseUrlComponents.percentEncodedQuery = requestUrlComponents.percentEncodedQuery
         guard let url = baseUrlComponents.url else {
             throw URLSessionTransportError.invalidRequestURL(
                 path: path,
