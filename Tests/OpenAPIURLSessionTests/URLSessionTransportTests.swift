@@ -34,7 +34,7 @@ class URLSessionTransportTests: XCTestCase {
     func testRequestConversion() async throws {
         let request = HTTPRequest(
             method: .post,
-            scheme: nil, 
+            scheme: nil,
             authority: nil,
             path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
