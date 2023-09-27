@@ -38,7 +38,7 @@ class URLSessionTransportTests: XCTestCase {
             authority: nil,
             path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
-                .init("x-mumble")!: "mumble"
+                .init("x-mumble2")!: "mumble"
             ]
         )
         let body: HTTPBody = "👋"
@@ -49,7 +49,8 @@ class URLSessionTransportTests: XCTestCase {
         )
         XCTAssertEqual(urlRequest.url, URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy"))
         XCTAssertEqual(urlRequest.httpMethod, "POST")
-        XCTAssertEqual(urlRequest.allHTTPHeaderFields, ["x-mumble": "mumble"])
+        XCTAssertEqual(urlRequest.allHTTPHeaderFields?.count, 1)
+        XCTAssertEqual(urlRequest.value(forHTTPHeaderField: "x-mumble2"), "mumble")
         XCTAssertEqual(urlRequest.httpBody, Data("👋".utf8))
     }
 
@@ -58,7 +59,7 @@ class URLSessionTransportTests: XCTestCase {
             url: URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy")!,
             statusCode: 201,
             httpVersion: "HTTP/1.1",
-            headerFields: ["x-mumble": "mumble"]
+            headerFields: ["x-mumble3": "mumble"]
         )!
         let (response, maybeResponseBody) = try HTTPResponse.response(
             method: .get,
@@ -67,7 +68,7 @@ class URLSessionTransportTests: XCTestCase {
         )
         let responseBody = try XCTUnwrap(maybeResponseBody)
         XCTAssertEqual(response.status.code, 201)
-        XCTAssertEqual(response.headerFields, [.init("x-mumble")!: "mumble"])
+        XCTAssertEqual(response.headerFields, [.init("x-mumble3")!: "mumble"])
         let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
         XCTAssertEqual(bufferedResponseBody, "👋")
     }
@@ -91,7 +92,7 @@ class URLSessionTransportTests: XCTestCase {
             authority: nil,
             path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
-                .init("x-mumble")!: "mumble"
+                .init("x-mumble1")!: "mumble"
             ]
         )
         let requestBody: HTTPBody = "👋"

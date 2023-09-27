@@ -208,7 +208,7 @@ extension URLRequest {
         self.init(url: url)
         self.httpMethod = request.method.rawValue
         for header in request.headerFields {
-            self.addValue(header.value, forHTTPHeaderField: header.name.canonicalName)
+            self.setValue(header.value, forHTTPHeaderField: header.name.canonicalName)
         }
         if let body {
             // TODO: Avoid buffering, stream intead.
