@@ -33,8 +33,10 @@ class URLSessionTransportTests: XCTestCase {
 
     func testRequestConversion() async throws {
         let request = HTTPRequest(
-            soar_path: "/hello%20world/Maria?greeting=Howdy",
             method: .post,
+            scheme: nil, 
+            authority: nil,
+            path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
                 .init("X-Mumble")!: "mumble"
             ]
@@ -84,8 +86,10 @@ class URLSessionTransportTests: XCTestCase {
             configuration: .init(session: MockURLProtocol.mockURLSession)
         )
         let request = HTTPRequest(
-            soar_path: "/hello%20world/Maria?greeting=Howdy",
             method: .post,
+            scheme: nil,
+            authority: nil,
+            path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
                 .init("X-Mumble")!: "mumble"
             ]
