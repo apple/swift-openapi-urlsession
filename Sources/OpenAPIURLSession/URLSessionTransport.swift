@@ -96,7 +96,7 @@ public struct URLSessionTransport: ClientTransport {
         baseURL: URL,
         operationID: String
     ) async throws -> (HTTPResponse, HTTPBody?) {
-        // TODO: Investigate how to get bidirectional streaming working.
+        // TODO: https://github.com/apple/swift-openapi-generator/issues/301
         let urlRequest = try await URLRequest(request, body: body, baseURL: baseURL)
         let (responseBody, urlResponse) = try await invokeSession(urlRequest)
         return try HTTPResponse.response(
@@ -211,7 +211,7 @@ extension URLRequest {
             self.setValue(header.value, forHTTPHeaderField: header.name.canonicalName)
         }
         if let body {
-            // TODO: Avoid buffering, stream intead.
+            // TODO: https://github.com/apple/swift-openapi-generator/issues/301
             self.httpBody = try await Data(collecting: body, upTo: .max)
         }
     }
