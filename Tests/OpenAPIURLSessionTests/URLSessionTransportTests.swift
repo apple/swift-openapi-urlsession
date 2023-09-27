@@ -38,7 +38,7 @@ class URLSessionTransportTests: XCTestCase {
             authority: nil,
             path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
-                .init("X-Mumble")!: "mumble"
+                .init("x-mumble")!: "mumble"
             ]
         )
         let body: HTTPBody = "👋"
@@ -58,7 +58,7 @@ class URLSessionTransportTests: XCTestCase {
             url: URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy")!,
             statusCode: 201,
             httpVersion: "HTTP/1.1",
-            headerFields: ["X-Mumble": "mumble"]
+            headerFields: ["x-mumble": "mumble"]
         )!
         let (response, maybeResponseBody) = try HTTPResponse.response(
             method: .get,
@@ -67,7 +67,7 @@ class URLSessionTransportTests: XCTestCase {
         )
         let responseBody = try XCTUnwrap(maybeResponseBody)
         XCTAssertEqual(response.status.code, 201)
-        XCTAssertEqual(response.headerFields, [.init("X-Mumble")!: "mumble"])
+        XCTAssertEqual(response.headerFields, [.init("x-mumble")!: "mumble"])
         let bufferedResponseBody = try await String(collecting: responseBody, upTo: .max)
         XCTAssertEqual(bufferedResponseBody, "👋")
     }
@@ -91,7 +91,7 @@ class URLSessionTransportTests: XCTestCase {
             authority: nil,
             path: "/hello%20world/Maria?greeting=Howdy",
             headerFields: [
-                .init("X-Mumble")!: "mumble"
+                .init("x-mumble")!: "mumble"
             ]
         )
         let requestBody: HTTPBody = "👋"
