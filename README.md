@@ -1,8 +1,8 @@
 # URLSession Transport for Swift OpenAPI Generator
 
 [![](https://img.shields.io/badge/docc-read_documentation-blue)](https://swiftpackageindex.com/apple/swift-openapi-urlsession/documentation)
-[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fapple%2Fswift-openapi-runtime%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/apple/swift-openapi-runtime)
-[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fapple%2Fswift-openapi-runtime%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/apple/swift-openapi-runtime)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fapple%2Fswift-openapi-urlsession%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/apple/swift-openapi-urlsession)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fapple%2Fswift-openapi-urlsession%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/apple/swift-openapi-urlsession)
 
 A client transport that uses the [URLSession](https://developer.apple.com/documentation/foundation/urlsession) type from the [Foundation](https://developer.apple.com/documentation/foundation) framework to perform HTTP operations.
 
