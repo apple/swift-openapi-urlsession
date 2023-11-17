@@ -74,11 +74,11 @@ final class BidirectionalStreamingURLSessionDelegate: NSObject, URLSessionTaskDe
     ///
     /// Therefore, even though the `suspend()`, `resume()`, and `cancel()` URLSession methods are thread-safe, we need
     /// to protect any mutable state within the delegate itself.
-    let callbackLock = NSLock()
+    let callbackLock = NIOLock()
 
     /// In addition to the callback lock, there is one point of rentrancy, where the response stream callback gets fired
     /// immediately, for this we have a different lock, which protects `hasSuspendedURLSessionTask`.
-    let hasSuspendedURLSessionTaskLock = NSLock()
+    let hasSuspendedURLSessionTaskLock = NIOLock()
 
     /// Use `bidirectionalStreamingRequest(for:baseURL:requestBody:requestStreamBufferSize:responseStreamWatermarks:)`.
     init(requestBody: HTTPBody?, requestStreamBufferSize: Int, responseStreamWatermarks: (low: Int, high: Int)) {
