@@ -25,14 +25,15 @@ final class HTTPBodyOutputStreamBridge: NSObject, StreamDelegate {
         didSet { debug("Output stream delegate state transition: \(oldValue) -> \(state)") }
     }
 
-    init(_ outputStream: OutputStream, _ httpBody: HTTPBody, openOutputStream: Bool = true) {
+    /// Creates a new `HTTPBodyOutputStreamBridge` and opens the output stream.
+    init(_ outputStream: OutputStream, _ httpBody: HTTPBody) {
         self.httpBody = httpBody
         self.outputStream = outputStream
         self.state = .initial
         super.init()
         self.outputStream.delegate = self
         CFWriteStreamSetDispatchQueue(self.outputStream as CFWriteStream, Self.streamQueue)
-        if openOutputStream { self.outputStream.open() }
+        self.outputStream.open()
     }
 
     deinit { debug("Output stream delegate deinit") }

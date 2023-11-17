@@ -111,8 +111,8 @@ final class BidirectionalStreamingURLSessionDelegate: NSObject, URLSessionTaskDe
             // Create a fresh pair of streams.
             let (inputStream, outputStream) = createStreamPair(withBufferSize: requestStreamBufferSize)
 
-            // Bridge the output stream to the request body and open the output stream.
-            requestStream = HTTPBodyOutputStreamBridge(outputStream, requestBody!, openOutputStream: true)
+            // Bridge the output stream to the request body (which opens the output stream).
+            requestStream = HTTPBodyOutputStreamBridge(outputStream, requestBody!)
 
             // Return the new input stream (unopened, it gets opened by URLSession).
             return inputStream
