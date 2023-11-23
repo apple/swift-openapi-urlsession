@@ -164,3 +164,10 @@ extension AsyncStream {
         return (stream, continuation)
     }
 }
+
+extension AsyncSequence {
+    /// Collect all elements in the sequence into an array.
+    func collect() async throws -> [Element] {
+        try await self.reduce(into: []) { accumulated, next in accumulated.append(next) }
+    }
+}
