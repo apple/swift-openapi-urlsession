@@ -1088,6 +1088,78 @@ final class BufferedStreamTests: XCTestCase {
         let elements = try await backpressuredStream.collect()
         XCTAssertEqual(elements, [1, 2])
     }
+
+    func testWatermarkBackPressureStrategy() async throws {
+        typealias Strategy = BufferedStream<String>._WatermarkBackPressureStrategy
+        var strategy = Strategy(low: 2, high: 3)
+
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice(["*", "*"])), true)
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didYield(elements: Slice(["*"])), false)
+        XCTAssertEqual(strategy._current, 3)
+        XCTAssertEqual(strategy.didYield(elements: Slice(["*"])), false)
+        XCTAssertEqual(strategy._current, 4)
+
+        XCTAssertEqual(strategy._current, 4)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), false)
+        XCTAssertEqual(strategy._current, 4)
+        XCTAssertEqual(strategy.didConsume(elements: Slice(["*", "*"])), false)
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didConsume(elements: Slice(["*"])), true)
+        XCTAssertEqual(strategy._current, 1)
+        XCTAssertEqual(strategy.didConsume(elements: Slice(["*"])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+    }
+
+    func testWatermarkWithoutElementCountsBackPressureStrategy() async throws {
+        typealias Strategy = BufferedStream<[String]>._WatermarkBackPressureStrategy
+        var strategy = Strategy(low: 2, high: 3)
+
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 1)
+        XCTAssertEqual(strategy.didYield(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 2)
+
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), false)
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 1)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+    }
+
+    func testWatermarkWithElementCountsBackPressureStrategy() async throws {
+        typealias Strategy = BufferedStream<[String]>._WatermarkBackPressureStrategy
+        var strategy = Strategy(low: 2, high: 3, waterLevelForElement: { $0.count })
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didYield(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didYield(elements: Slice([["*", "*"]])), false)
+        XCTAssertEqual(strategy._current, 4)
+
+        XCTAssertEqual(strategy._current, 4)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), false)
+        XCTAssertEqual(strategy._current, 4)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([["*", "*"]])), false)
+        XCTAssertEqual(strategy._current, 2)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([["*", "*"]])), true)
+        XCTAssertEqual(strategy._current, 0)
+        XCTAssertEqual(strategy.didConsume(elements: Slice([])), true)
+        XCTAssertEqual(strategy._current, 0)
+    }
 }
 
 extension BufferedStream.Source.WriteResult {

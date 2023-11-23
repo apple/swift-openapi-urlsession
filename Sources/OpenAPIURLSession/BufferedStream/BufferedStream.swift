@@ -269,11 +269,23 @@ extension BufferedStream {
         @usableFromInline
         internal struct BackPressureStrategy: Sendable {
             /// When the high watermark is reached producers will be suspended. All producers will be resumed again once
-            /// the low watermark is reached.
+            /// the low watermark is reached. The current watermark is the number of elements in the buffer.
             @inlinable
             internal static func watermark(low: Int, high: Int) -> BackPressureStrategy {
                 BackPressureStrategy(
                     internalBackPressureStrategy: .watermark(.init(low: low, high: high))
+                )
+            }
+
+            /// When the high watermark is reached producers will be suspended. All producers will be resumed again once
+            /// the low watermark is reached. The current watermark is computed using the given closure.
+            static func customWatermark(
+                low: Int,
+                high: Int,
+                waterLevelForElement: @escaping @Sendable (Element) -> Int
+            ) -> BackPressureStrategy where Element: RandomAccessCollection {
+                BackPressureStrategy(
+                    internalBackPressureStrategy: .watermark(.init(low: low, high: high, waterLevelForElement: waterLevelForElement))
                 )
             }
 
@@ -584,29 +596,62 @@ extension BufferedStream {
         /// The high watermark where demand should be stopped.
         @usableFromInline
         let _high: Int
+        /// The current watermark.
+        @usableFromInline
+        private(set) var _current: Int
+        /// Function to compute the contribution to the water level for a given element.
+        @usableFromInline
+        let _waterLevelForElement: (@Sendable (Element) -> Int)?
 
         /// Initializes a new ``_WatermarkBackPressureStrategy``.
         ///
         /// - Parameters:
         ///   - low: The low watermark where demand should start.
         ///   - high: The high watermark where demand should be stopped.
+        ///   - waterLevelForElement: Function to compute the contribution to the water level for a given element.
         @inlinable
-        init(low: Int, high: Int) {
+        init(low: Int, high: Int, waterLevelForElement: (@Sendable (Element) -> Int)? = nil) {
             precondition(low <= high)
             self._low = low
             self._high = high
+            self._current = 0
+            self._waterLevelForElement = waterLevelForElement
         }
 
         @inlinable
-        func didYield(bufferDepth: Int) -> Bool {
+        mutating func didYield(elements: Deque<Element>.SubSequence) -> Bool {
+            if let waterLevelForElement = self._waterLevelForElement {
+                self._current += elements.reduce(0) { $0 + waterLevelForElement($1) }
+            } else {
+                self._current += elements.count
+            }
+            precondition(self._current >= 0, "Watermark below zero")
             // We are demanding more until we reach the high watermark
-            return bufferDepth < self._high
+            return self._current < self._high
         }
 
         @inlinable
-        func didConsume(bufferDepth: Int) -> Bool {
+        mutating func didConsume(elements: Deque<Element>.SubSequence) -> Bool {
+            if let waterLevelForElement = self._waterLevelForElement {
+                self._current -= elements.reduce(0) { $0 + waterLevelForElement($1) }
+            } else {
+                self._current -= elements.count
+            }
+            precondition(self._current >= 0, "Watermark below zero")
             // We start demanding again once we are below the low watermark
-            return bufferDepth < self._low
+            return self._current < self._low
+        }
+
+        @inlinable
+        mutating func didConsume(element: Element) -> Bool {
+            if let waterLevelForElement = self._waterLevelForElement {
+                self._current -= waterLevelForElement(element)
+            } else {
+                self._current -= 1
+            }
+            precondition(self._current >= 0, "Watermark below zero")
+            // We start demanding again once we are below the low watermark
+            return self._current < self._low
         }
     }
 
@@ -615,18 +660,32 @@ extension BufferedStream {
         case watermark(_WatermarkBackPressureStrategy)
 
         @inlinable
-        mutating func didYield(bufferDepth: Int) -> Bool {
+        mutating func didYield(elements: Deque<Element>.SubSequence) -> Bool {
             switch self {
-            case .watermark(let strategy):
-                return strategy.didYield(bufferDepth: bufferDepth)
+            case .watermark(var strategy):
+                let result = strategy.didYield(elements: elements)
+                self = .watermark(strategy)
+                return result
             }
         }
 
         @inlinable
-        mutating func didConsume(bufferDepth: Int) -> Bool {
+        mutating func didConsume(elements: Deque<Element>.SubSequence) -> Bool {
             switch self {
-            case .watermark(let strategy):
-                return strategy.didConsume(bufferDepth: bufferDepth)
+            case .watermark(var strategy):
+                let result = strategy.didConsume(elements: elements)
+                self = .watermark(strategy)
+                return result
+            }
+        }
+
+        @inlinable
+        mutating func didConsume(element: Element) -> Bool {
+            switch self {
+            case .watermark(var strategy):
+                let result = strategy.didConsume(element: element)
+                self = .watermark(strategy)
+                return result
             }
         }
     }
@@ -1441,9 +1500,7 @@ extension BufferedStream {
                 var buffer = Deque<Element>()
                 buffer.append(contentsOf: sequence)
 
-                let shouldProduceMore = initial.backPressureStrategy.didYield(
-                    bufferDepth: buffer.count
-                )
+                let shouldProduceMore = initial.backPressureStrategy.didYield(elements: buffer[...])
                 let callbackToken = shouldProduceMore ? nil : self.nextCallbackToken()
 
                 self._state = .streaming(
@@ -1464,35 +1521,35 @@ extension BufferedStream {
             case .streaming(var streaming):
                 self._state = .modify
 
+                let bufferEndIndexBeforeAppend = streaming.buffer.endIndex
                 streaming.buffer.append(contentsOf: sequence)
 
                 // We have an element and can resume the continuation
-                let shouldProduceMore = streaming.backPressureStrategy.didYield(
-                    bufferDepth: streaming.buffer.count
+                streaming.hasOutstandingDemand = streaming.backPressureStrategy.didYield(
+                    elements: streaming.buffer[bufferEndIndexBeforeAppend...]
                 )
-                streaming.hasOutstandingDemand = shouldProduceMore
-                let callbackToken = shouldProduceMore ? nil : self.nextCallbackToken()
 
                 if let consumerContinuation = streaming.consumerContinuation {
                     guard let element = streaming.buffer.popFirst() else {
                         // We got a yield of an empty sequence. We just tolerate this.
                         self._state = .streaming(streaming)
 
-                        return .init(callbackToken: callbackToken)
+                        return .init(callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken())
                     }
+                    streaming.hasOutstandingDemand = streaming.backPressureStrategy.didConsume(element: element)
 
                     // We got a consumer continuation and an element. We can resume the consumer now
                     streaming.consumerContinuation = nil
                     self._state = .streaming(streaming)
                     return .init(
-                        callbackToken: callbackToken,
+                        callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken(),
                         continuationAndElement: (consumerContinuation, element)
                     )
                 } else {
                     // We don't have a suspended consumer so we just buffer the elements
                     self._state = .streaming(streaming)
                     return .init(
-                        callbackToken: callbackToken
+                        callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken()
                     )
                 }
 
@@ -1723,12 +1780,9 @@ extension BufferedStream {
 
                 if let element = streaming.buffer.popFirst() {
                     // We have an element to fulfil the demand right away.
-                    let shouldProduceMore = streaming.backPressureStrategy.didConsume(
-                        bufferDepth: streaming.buffer.count
-                    )
-                    streaming.hasOutstandingDemand = shouldProduceMore
+                    streaming.hasOutstandingDemand = streaming.backPressureStrategy.didConsume(element: element)
 
-                    if shouldProduceMore {
+                    if streaming.hasOutstandingDemand {
                         // There is demand and we have to resume our producers
                         let producers = Array(streaming.producerContinuations.map { $0.1 })
                         streaming.producerContinuations.removeAll()
@@ -1818,12 +1872,9 @@ extension BufferedStream {
                 if let element = streaming.buffer.popFirst() {
                     // We have an element to fulfil the demand right away.
 
-                    let shouldProduceMore = streaming.backPressureStrategy.didConsume(
-                        bufferDepth: streaming.buffer.count
-                    )
-                    streaming.hasOutstandingDemand = shouldProduceMore
+                    streaming.hasOutstandingDemand = streaming.backPressureStrategy.didConsume(element: element)
 
-                    if shouldProduceMore {
+                    if streaming.hasOutstandingDemand {
                         // There is demand and we have to resume our producers
                         let producers = Array(streaming.producerContinuations.map { $0.1 })
                         streaming.producerContinuations.removeAll()
