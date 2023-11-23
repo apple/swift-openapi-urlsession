@@ -198,11 +198,84 @@ final class AsyncBackpressuredStreamTests: XCTestCase {
         XCTAssertEqual(strategy.didConsume(elements: Slice([])), true)
         XCTAssertEqual(strategy.currentWatermark, 0)
     }
+
+extension AsyncBackpressuredStream.Source.WriteResult: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .enqueueCallback: return "enqueueCallBack"
+        case .produceMore: return "produceMore"
+        }
+    }
+}
+
+extension AsyncBackpressuredStream.StateMachine.SuspendNextAction: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .none: return "none"
+        case .resumeContinuationWithElement: return "resumeContinuationWithElement"
+        case .resumeContinuationWithElementAndProducers: return "resumeContinuationWithElementAndProducers"
+        case .resumeContinuationWithFailureAndCallOnTerminate: return "resumeContinuationWithFailureAndCallOnTerminate"
+        case .resumeContinuationWithNil: return "resumeContinuationWithNil"
+        }
+    }
+}
+
+extension AsyncBackpressuredStream.StateMachine.State: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .initial: return "initial"
+        case .streaming(_, let buffer, let consumer, let producers, _, let demand, _, _):
+            return
+                "streaming(buffer.count: \(buffer.count), consumer: \(consumer != nil ? "yes" : "no"), producers: \(producers), demand: \(demand))"
+        case .finished: return "finished"
+        case .sourceFinished: return "sourceFinished"
+        }
+    }
 }
 
 extension AsyncSequence {
     /// Collect all elements in the sequence into an array.
     fileprivate func collect() async rethrows -> [Element] {
         try await self.reduce(into: []) { accumulated, next in accumulated.append(next) }
+    }
+}
+
+extension AsyncBackpressuredStream.StateMachine.NextAction: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .returnNil: return "returnNil"
+        case .returnElementAndResumeProducers: return "returnElementAndResumeProducers"
+        case .returnFailureAndCallOnTerminate: return "returnFailureAndCallOnTerminate"
+        case .returnElement: return "returnElement"
+        case .suspendTask: return "suspendTask"
+        }
+    }
+}
+
+extension AsyncBackpressuredStream.StateMachine.WriteAction: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .returnProduceMore: return "returnProduceMore"
+        case .returnEnqueue: return "returnEnqueue"
+        case .resumeConsumerContinuationAndReturnProduceMore: return "resumeConsumerContinuationAndReturnProduceMore"
+        case .resumeConsumerContinuationAndReturnEnqueue: return "resumeConsumerContinuationAndReturnEnqueue"
+        case .throwFinishedError: return "throwFinishedError"
+        }
+    }
+}
+
+extension AsyncBackpressuredStream.StateMachine.EnqueueProducerAction: CustomStringConvertible {
+    // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
+    public var description: String {
+        switch self {
+        case .resumeProducer: return "resumeProducer"
+        case .resumeProducerWithCancellationError: return "resumeProducerWithCancellationError"
+        case .none: return "none"
+        }
     }
 }
