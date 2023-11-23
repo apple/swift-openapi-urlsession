@@ -199,6 +199,84 @@ final class AsyncBackpressuredStreamTests: XCTestCase {
         XCTAssertEqual(strategy.currentWatermark, 0)
     }
 
+    func testWritingOverWatermark() async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            let (stream, continuation) = AsyncBackpressuredStream<Int, any Error>
+                .makeStream(backPressureStrategy: .highLowWatermark(lowWatermark: 1, highWatermark: 1))
+
+            group.addTask {
+                for i in 1...10 {
+                    debug("Producer writing element \(i)...")
+                    let writeResult = try continuation.write(contentsOf: CollectionOfOne(i))
+                    debug("Producer wrote element \(i), result = \(writeResult)")
+                    // ignore backpressure result and write again anyway
+                }
+                debug("Producer finished")
+                continuation.finish(throwing: nil)
+            }
+
+            var iterator = stream.makeAsyncIterator()
+            var numElementsConsumed = 0
+            var expectedNextValue = 1
+            while true {
+                debug("Consumer reading element...")
+                guard let element = try await iterator.next() else { break }
+                XCTAssertEqual(element, expectedNextValue)
+                debug("Consumer read element: \(element), expected: \(expectedNextValue)")
+                numElementsConsumed += 1
+                expectedNextValue += 1
+            }
+            XCTAssertEqual(numElementsConsumed, 10)
+
+            group.cancelAll()
+        }
+    }
+
+    func testStateMachineSuspendNext() async throws {
+        typealias Stream = AsyncBackpressuredStream<Int, any Error>
+
+        var strategy = Stream.InternalBackPressureStrategy.highLowWatermark(.init(lowWatermark: 1, highWatermark: 1))
+        _ = strategy.didYield(elements: Slice([1, 2, 3]))
+        var stateMachine = Stream.StateMachine(backPressureStrategy: strategy, onTerminate: nil)
+        stateMachine.state = .streaming(
+            backPressureStrategy: strategy,
+            buffer: [1, 2, 3],
+            consumerContinuation: nil,
+            producerContinuations: [],
+            cancelledAsyncProducers: [],
+            hasOutstandingDemand: false,
+            iteratorInitialized: true,
+            onTerminate: nil
+        )
+
+        guard case .streaming(_, let buffer, let consumerContinuation, _, _, _, _, _) = stateMachine.state else {
+            XCTFail("Unexpected state: \(stateMachine.state)")
+            return
+        }
+        XCTAssertEqual(buffer, [1, 2, 3])
+        XCTAssertNil(consumerContinuation)
+
+        _ = try await withCheckedThrowingContinuation { continuation in
+            let action = stateMachine.suspendNext(continuation: continuation)
+
+            guard case .resumeContinuationWithElement(_, let element) = action else {
+                XCTFail("Unexpected action: \(action)")
+                return
+            }
+            XCTAssertEqual(element, 1)
+
+            guard case .streaming(_, let buffer, let consumerContinuation, _, _, _, _, _) = stateMachine.state else {
+                XCTFail("Unexpected state: \(stateMachine.state)")
+                return
+            }
+            XCTAssertEqual(buffer, [2, 3])
+            XCTAssertNil(consumerContinuation)
+
+            continuation.resume(returning: element)
+        }
+    }
+}
+
 extension AsyncBackpressuredStream.Source.WriteResult: CustomStringConvertible {
     // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
     public var description: String {
