@@ -1289,6 +1289,16 @@ extension AsyncBackpressuredStream {
 
                 guard shouldProduceMore else {
                     // We don't have any new demand, so we can just return the element.
+                    self.state = .streaming(
+                        backPressureStrategy: backPressureStrategy,
+                        buffer: buffer,
+                        consumerContinuation: nil,
+                        producerContinuations: producerContinuations,
+                        cancelledAsyncProducers: cancelledAsyncProducers,
+                        hasOutstandingDemand: hasOutstandingDemand,
+                        iteratorInitialized: iteratorInitialized,
+                        onTerminate: onTerminate
+                    )
                     return .resumeContinuationWithElement(continuation, element)
                 }
                 let producers = Array(producerContinuations.map { $0.1 })
