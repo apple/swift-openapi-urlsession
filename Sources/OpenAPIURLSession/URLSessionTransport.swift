@@ -114,7 +114,7 @@ public struct URLSessionTransport: ClientTransport {
         switch self.configuration.implemenation {
         case .streaming(let requestBodyStreamBufferSize, let responseBodyStreamWatermarks):
             #if canImport(Darwin)
-            guard #available(macOS 12, iOS 15, tvOS 15, watchOS 8, *) else {
+            guard #available(macOS 12, iOS 15, tvOS 15, watchOS 8, visionOS 1, *) else {
                 throw URLSessionTransportError.streamingNotSupported
             }
             return try await configuration.session.bidirectionalStreamingRequest(
@@ -281,7 +281,7 @@ extension URLSession {
 extension URLSessionTransport.Configuration.Implementation {
     static var platformSupportsStreaming: Bool {
         #if canImport(Darwin)
-        guard #available(macOS 12, iOS 15, tvOS 15, watchOS 8, *) else { return false }
+        guard #available(macOS 12, iOS 15, tvOS 15, watchOS 8, visionOS 1, *) else { return false }
         _ = URLSession.bidirectionalStreamingRequest
         return true
         #else

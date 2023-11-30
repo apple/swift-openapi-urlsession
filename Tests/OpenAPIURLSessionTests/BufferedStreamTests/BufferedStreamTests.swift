@@ -28,7 +28,7 @@ import XCTest
 
 @testable import OpenAPIURLSession
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, visionOS 1, *)
 final class BufferedStreamTests: XCTestCase {
     // MARK: - sequenceDeinitialized
 
