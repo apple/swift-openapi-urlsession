@@ -142,7 +142,7 @@ internal struct BufferedStream<Element> {
         }
 
         deinit {
-            self.storage.sequenceDeinitialized()
+            storage.sequenceDeinitialized()
         }
     }
 
@@ -178,7 +178,7 @@ extension BufferedStream: AsyncSequence {
             }
 
             deinit {
-                self.storage.iteratorDeinitialized()
+                storage.iteratorDeinitialized()
             }
         }
 
@@ -211,7 +211,7 @@ extension BufferedStream: AsyncSequence {
         /// subsequent calls.
         @inlinable
         internal mutating func next() async throws -> Element? {
-            switch self.implementation {
+            switch implementation {
             case .backpressured(let backing):
                 return try await backing.storage.next()
             }
@@ -222,7 +222,7 @@ extension BufferedStream: AsyncSequence {
     /// asynchronous sequence.
     @inlinable
     internal func makeAsyncIterator() -> Iterator {
-        switch self.implementation {
+        switch implementation {
         case .backpressured(let backing):
             return Iterator(implementation: .backpressured(.init(storage: backing.storage)))
         }
@@ -246,7 +246,7 @@ internal struct _ManagedCriticalState<State>: @unchecked Sendable {
     internal func withCriticalRegion<R>(
         _ critical: (inout State) throws -> R
     ) rethrows -> R {
-        try self.lock.withLockedValue(critical)
+        try lock.withLockedValue(critical)
     }
 }
 
@@ -335,7 +335,7 @@ extension BufferedStream {
             }
 
             deinit {
-                self.storage.sourceDeinitialized()
+                storage.sourceDeinitialized()
             }
         }
 
@@ -375,7 +375,7 @@ extension BufferedStream {
         @inlinable
         internal func write<S>(contentsOf sequence: S) throws -> WriteResult
         where Element == S.Element, S: Sequence {
-            try self._backing.storage.write(contentsOf: sequence)
+            try _backing.storage.write(contentsOf: sequence)
         }
 
         /// Write the element to the asynchronous stream.
@@ -388,7 +388,7 @@ extension BufferedStream {
         /// - Returns: The result that indicates if more elements should be produced at this time.
         @inlinable
         internal func write(_ element: Element) throws -> WriteResult {
-            try self._backing.storage.write(contentsOf: CollectionOfOne(element))
+            try _backing.storage.write(contentsOf: CollectionOfOne(element))
         }
 
         /// Enqueues a callback that will be invoked once more elements should be produced.
@@ -405,7 +405,7 @@ extension BufferedStream {
             callbackToken: WriteResult.CallbackToken,
             onProduceMore: @escaping @Sendable (Result<Void, any Error>) -> Void
         ) {
-            self._backing.storage.enqueueProducer(
+            _backing.storage.enqueueProducer(
                 callbackToken: callbackToken,
                 onProduceMore: onProduceMore
             )
@@ -421,7 +421,7 @@ extension BufferedStream {
         /// - Parameter callbackToken: The callback token.
         @inlinable
         internal func cancelCallback(callbackToken: WriteResult.CallbackToken) {
-            self._backing.storage.cancelProducer(callbackToken: callbackToken)
+            _backing.storage.cancelProducer(callbackToken: callbackToken)
         }
 
         /// Write new elements to the asynchronous stream and provide a callback which will be invoked once more elements should be produced.
@@ -440,14 +440,14 @@ extension BufferedStream {
             onProduceMore: @escaping @Sendable (Result<Void, any Error>) -> Void
         ) where Element == S.Element, S: Sequence {
             do {
-                let writeResult = try self.write(contentsOf: sequence)
+                let writeResult = try write(contentsOf: sequence)
 
                 switch writeResult {
                 case .produceMore:
                     onProduceMore(Result<Void, any Error>.success(()))
 
                 case .enqueueCallback(let callbackToken):
-                    self.enqueueCallback(callbackToken: callbackToken, onProduceMore: onProduceMore)
+                    enqueueCallback(callbackToken: callbackToken, onProduceMore: onProduceMore)
                 }
             } catch {
                 onProduceMore(.failure(error))
@@ -469,7 +469,7 @@ extension BufferedStream {
             _ element: Element,
             onProduceMore: @escaping @Sendable (Result<Void, any Error>) -> Void
         ) {
-            self.write(contentsOf: CollectionOfOne(element), onProduceMore: onProduceMore)
+            write(contentsOf: CollectionOfOne(element), onProduceMore: onProduceMore)
         }
 
         /// Write new elements to the asynchronous stream.
@@ -485,7 +485,7 @@ extension BufferedStream {
         @inlinable
         internal func write<S>(contentsOf sequence: S) async throws
         where Element == S.Element, S: Sequence {
-            let writeResult = try { try self.write(contentsOf: sequence) }()
+            let writeResult = try { try write(contentsOf: sequence) }()
 
             switch writeResult {
             case .produceMore:
@@ -524,7 +524,7 @@ extension BufferedStream {
         ///   - sequence: The element to write to the asynchronous stream.
         @inlinable
         internal func write(_ element: Element) async throws {
-            try await self.write(contentsOf: CollectionOfOne(element))
+            try await write(contentsOf: CollectionOfOne(element))
         }
 
         /// Write the elements of the asynchronous sequence to the asynchronous stream.
@@ -539,7 +539,7 @@ extension BufferedStream {
         internal func write<S>(contentsOf sequence: S) async throws
         where Element == S.Element, S: AsyncSequence {
             for try await element in sequence {
-                try await self.write(contentsOf: CollectionOfOne(element))
+                try await write(contentsOf: CollectionOfOne(element))
             }
         }
 
@@ -554,7 +554,7 @@ extension BufferedStream {
         ///   - error: The error to throw, or `nil`, to finish normally.
         @inlinable
         internal func finish(throwing error: (any Error)?) {
-            self._backing.storage.finish(error)
+            _backing.storage.finish(error)
         }
     }
 
@@ -620,38 +620,38 @@ extension BufferedStream {
 
         @usableFromInline
         mutating func didYield(elements: Deque<Element>.SubSequence) -> Bool {
-            if let waterLevelForElement = self._waterLevelForElement {
-                self._current += elements.reduce(0) { $0 + waterLevelForElement($1) }
+            if let waterLevelForElement = _waterLevelForElement {
+                _current += elements.reduce(0) { $0 + waterLevelForElement($1) }
             } else {
-                self._current += elements.count
+                _current += elements.count
             }
-            precondition(self._current >= 0, "Watermark below zero")
+            precondition(_current >= 0, "Watermark below zero")
             // We are demanding more until we reach the high watermark
-            return self._current < self._high
+            return _current < _high
         }
 
         @usableFromInline
         mutating func didConsume(elements: Deque<Element>.SubSequence) -> Bool {
-            if let waterLevelForElement = self._waterLevelForElement {
-                self._current -= elements.reduce(0) { $0 + waterLevelForElement($1) }
+            if let waterLevelForElement = _waterLevelForElement {
+                _current -= elements.reduce(0) { $0 + waterLevelForElement($1) }
             } else {
-                self._current -= elements.count
+                _current -= elements.count
             }
-            precondition(self._current >= 0, "Watermark below zero")
+            precondition(_current >= 0, "Watermark below zero")
             // We start demanding again once we are below the low watermark
-            return self._current < self._low
+            return _current < _low
         }
 
         @usableFromInline
         mutating func didConsume(element: Element) -> Bool {
-            if let waterLevelForElement = self._waterLevelForElement {
-                self._current -= waterLevelForElement(element)
+            if let waterLevelForElement = _waterLevelForElement {
+                _current -= waterLevelForElement(element)
             } else {
-                self._current -= 1
+                _current -= 1
             }
-            precondition(self._current >= 0, "Watermark below zero")
+            precondition(_current >= 0, "Watermark below zero")
             // We start demanding again once we are below the low watermark
-            return self._current < self._low
+            return _current < _low
         }
     }
 
@@ -703,12 +703,12 @@ extension BufferedStream {
         @usableFromInline
         var onTermination: (@Sendable () -> Void)? {
             set {
-                self._stateMachine.withCriticalRegion {
+                _stateMachine.withCriticalRegion {
                     $0._onTermination = newValue
                 }
             }
             get {
-                self._stateMachine.withCriticalRegion {
+                _stateMachine.withCriticalRegion {
                     $0._onTermination
                 }
             }
@@ -718,12 +718,12 @@ extension BufferedStream {
         init(
             backPressureStrategy: _InternalBackPressureStrategy
         ) {
-            self._stateMachine = .init(.init(backPressureStrategy: backPressureStrategy))
+            _stateMachine = .init(.init(backPressureStrategy: backPressureStrategy))
         }
 
         @inlinable
         func sequenceDeinitialized() {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.sequenceDeinitialized()
             }
 
@@ -751,7 +751,7 @@ extension BufferedStream {
 
         @inlinable
         func iteratorDeinitialized() {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.iteratorDeinitialized()
             }
 
@@ -805,7 +805,7 @@ extension BufferedStream {
         func write(
             contentsOf sequence: some Sequence<Element>
         ) throws -> Source.WriteResult {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 return $0.write(sequence)
             }
 
@@ -834,7 +834,7 @@ extension BufferedStream {
             callbackToken: Source.WriteResult.CallbackToken,
             onProduceMore: @escaping @Sendable (Result<Void, any Error>) -> Void
         ) {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.enqueueProducer(callbackToken: callbackToken, onProduceMore: onProduceMore)
             }
 
@@ -852,7 +852,7 @@ extension BufferedStream {
 
         @inlinable
         func cancelProducer(callbackToken: Source.WriteResult.CallbackToken) {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.cancelProducer(callbackToken: callbackToken)
             }
 
@@ -867,7 +867,7 @@ extension BufferedStream {
 
         @inlinable
         func finish(_ failure: (any Error)?) {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.finish(failure)
             }
 
@@ -901,7 +901,7 @@ extension BufferedStream {
 
         @inlinable
         func next() async throws -> Element? {
-            let action = self._stateMachine.withCriticalRegion {
+            let action = _stateMachine.withCriticalRegion {
                 $0.next()
             }
 
@@ -930,7 +930,7 @@ extension BufferedStream {
                 return nil
 
             case .suspendTask:
-                return try await self.suspendNext()
+                return try await suspendNext()
             }
         }
 
@@ -938,7 +938,7 @@ extension BufferedStream {
         func suspendNext() async throws -> Element? {
             return try await withTaskCancellationHandler {
                 return try await withCheckedThrowingContinuation { continuation in
-                    let action = self._stateMachine.withCriticalRegion {
+                    let action = _stateMachine.withCriticalRegion {
                         $0.suspendNext(continuation: continuation)
                     }
 
@@ -1142,18 +1142,18 @@ extension BufferedStream {
         @inlinable
         var _onTermination: (@Sendable () -> Void)? {
             set {
-                switch self._state {
+                switch _state {
                 case .initial(var initial):
                     initial.onTermination = newValue
-                    self._state = .initial(initial)
+                    _state = .initial(initial)
 
                 case .streaming(var streaming):
                     streaming.onTermination = newValue
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                 case .sourceFinished(var sourceFinished):
                     sourceFinished.onTermination = newValue
-                    self._state = .sourceFinished(sourceFinished)
+                    _state = .sourceFinished(sourceFinished)
 
                 case .finished:
                     break
@@ -1163,7 +1163,7 @@ extension BufferedStream {
                 }
             }
             get {
-                switch self._state {
+                switch _state {
                 case .initial(let initial):
                     return initial.onTermination
 
@@ -1203,8 +1203,8 @@ extension BufferedStream {
         /// Generates the next callback token.
         @inlinable
         mutating func nextCallbackToken() -> Source.WriteResult.CallbackToken {
-            let id = self.nextCallbackTokenID
-            self.nextCallbackTokenID += 1
+            let id = nextCallbackTokenID
+            nextCallbackTokenID += 1
             return .init(id: id)
         }
 
@@ -1222,7 +1222,7 @@ extension BufferedStream {
 
         @inlinable
         mutating func sequenceDeinitialized() -> SequenceDeinitializedAction? {
-            switch self._state {
+            switch _state {
             case .initial(let initial):
                 if initial.iteratorInitialized {
                     // An iterator was created and we deinited the sequence.
@@ -1230,7 +1230,7 @@ extension BufferedStream {
                     return .none
                 } else {
                     // No iterator was created so we can transition to finished right away.
-                    self._state = .finished(iteratorInitialized: false)
+                    _state = .finished(iteratorInitialized: false)
 
                     return .callOnTermination(initial.onTermination)
                 }
@@ -1242,7 +1242,7 @@ extension BufferedStream {
                     return .none
                 } else {
                     // No iterator was created so we can transition to finished right away.
-                    self._state = .finished(iteratorInitialized: false)
+                    _state = .finished(iteratorInitialized: false)
 
                     return .failProducersAndCallOnTermination(
                         Array(streaming.producerContinuations.map { $0.1 }),
@@ -1257,7 +1257,7 @@ extension BufferedStream {
                     return .none
                 } else {
                     // No iterator was created so we can transition to finished right away.
-                    self._state = .finished(iteratorInitialized: false)
+                    _state = .finished(iteratorInitialized: false)
 
                     return .callOnTermination(sourceFinished.onTermination)
                 }
@@ -1274,7 +1274,7 @@ extension BufferedStream {
 
         @inlinable
         mutating func iteratorInitialized() {
-            switch self._state {
+            switch _state {
             case .initial(var initial):
                 if initial.iteratorInitialized {
                     // Our sequence is a unicast sequence and does not support multiple AsyncIterator's
@@ -1282,7 +1282,7 @@ extension BufferedStream {
                 } else {
                     // The first and only iterator was initialized.
                     initial.iteratorInitialized = true
-                    self._state = .initial(initial)
+                    _state = .initial(initial)
                 }
 
             case .streaming(var streaming):
@@ -1292,7 +1292,7 @@ extension BufferedStream {
                 } else {
                     // The first and only iterator was initialized.
                     streaming.iteratorInitialized = true
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
                 }
 
             case .sourceFinished(var sourceFinished):
@@ -1302,7 +1302,7 @@ extension BufferedStream {
                 } else {
                     // The first and only iterator was initialized.
                     sourceFinished.iteratorInitialized = true
-                    self._state = .sourceFinished(sourceFinished)
+                    _state = .sourceFinished(sourceFinished)
                 }
 
             case .finished(iteratorInitialized: true):
@@ -1313,7 +1313,7 @@ extension BufferedStream {
                 // It is strange that an iterator is created after we are finished
                 // but it can definitely happen, e.g.
                 // Sequence.init -> source.finish -> sequence.makeAsyncIterator
-                self._state = .finished(iteratorInitialized: true)
+                _state = .finished(iteratorInitialized: true)
 
             case .modify:
                 fatalError("AsyncStream internal inconsistency")
@@ -1334,12 +1334,12 @@ extension BufferedStream {
 
         @inlinable
         mutating func iteratorDeinitialized() -> IteratorDeinitializedAction? {
-            switch self._state {
+            switch _state {
             case .initial(let initial):
                 if initial.iteratorInitialized {
                     // An iterator was created and deinited. Since we only support
                     // a single iterator we can now transition to finish.
-                    self._state = .finished(iteratorInitialized: true)
+                    _state = .finished(iteratorInitialized: true)
                     return .callOnTermination(initial.onTermination)
                 } else {
                     // An iterator needs to be initialized before it can be deinitialized.
@@ -1350,7 +1350,7 @@ extension BufferedStream {
                 if streaming.iteratorInitialized {
                     // An iterator was created and deinited. Since we only support
                     // a single iterator we can now transition to finish.
-                    self._state = .finished(iteratorInitialized: true)
+                    _state = .finished(iteratorInitialized: true)
 
                     return .failProducersAndCallOnTermination(
                         Array(streaming.producerContinuations.map { $0.1 }),
@@ -1365,7 +1365,7 @@ extension BufferedStream {
                 if sourceFinished.iteratorInitialized {
                     // An iterator was created and deinited. Since we only support
                     // a single iterator we can now transition to finish.
-                    self._state = .finished(iteratorInitialized: true)
+                    _state = .finished(iteratorInitialized: true)
                     return .callOnTermination(sourceFinished.onTermination)
                 } else {
                     // An iterator needs to be initialized before it can be deinitialized.
@@ -1399,16 +1399,16 @@ extension BufferedStream {
 
         @inlinable
         mutating func sourceDeinitialized() -> SourceDeinitializedAction? {
-            switch self._state {
+            switch _state {
             case .initial(let initial):
                 // The source got deinited before anything was written
-                self._state = .finished(iteratorInitialized: initial.iteratorInitialized)
+                _state = .finished(iteratorInitialized: initial.iteratorInitialized)
                 return .callOnTermination(initial.onTermination)
 
             case .streaming(let streaming):
                 if streaming.buffer.isEmpty {
                     // We can transition to finished right away since the buffer is empty now
-                    self._state = .finished(iteratorInitialized: streaming.iteratorInitialized)
+                    _state = .finished(iteratorInitialized: streaming.iteratorInitialized)
 
                     return .failProducersAndCallOnTermination(
                         streaming.consumerContinuation,
@@ -1419,7 +1419,7 @@ extension BufferedStream {
                     // The continuation must be `nil` if the buffer has elements
                     precondition(streaming.consumerContinuation == nil)
 
-                    self._state = .sourceFinished(
+                    _state = .sourceFinished(
                         .init(
                             iteratorInitialized: streaming.iteratorInitialized,
                             buffer: streaming.buffer,
@@ -1495,15 +1495,15 @@ extension BufferedStream {
 
         @inlinable
         mutating func write(_ sequence: some Sequence<Element>) -> WriteAction {
-            switch self._state {
+            switch _state {
             case .initial(var initial):
                 var buffer = Deque<Element>()
                 buffer.append(contentsOf: sequence)
 
                 let shouldProduceMore = initial.backPressureStrategy.didYield(elements: buffer[...])
-                let callbackToken = shouldProduceMore ? nil : self.nextCallbackToken()
+                let callbackToken = shouldProduceMore ? nil : nextCallbackToken()
 
-                self._state = .streaming(
+                _state = .streaming(
                     .init(
                         backPressureStrategy: initial.backPressureStrategy,
                         iteratorInitialized: initial.iteratorInitialized,
@@ -1519,7 +1519,7 @@ extension BufferedStream {
                 return .init(callbackToken: callbackToken)
 
             case .streaming(var streaming):
-                self._state = .modify
+                _state = .modify
 
                 let bufferEndIndexBeforeAppend = streaming.buffer.endIndex
                 streaming.buffer.append(contentsOf: sequence)
@@ -1532,24 +1532,24 @@ extension BufferedStream {
                 if let consumerContinuation = streaming.consumerContinuation {
                     guard let element = streaming.buffer.popFirst() else {
                         // We got a yield of an empty sequence. We just tolerate this.
-                        self._state = .streaming(streaming)
+                        _state = .streaming(streaming)
 
-                        return .init(callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken())
+                        return .init(callbackToken: streaming.hasOutstandingDemand ? nil : nextCallbackToken())
                     }
                     streaming.hasOutstandingDemand = streaming.backPressureStrategy.didConsume(element: element)
 
                     // We got a consumer continuation and an element. We can resume the consumer now
                     streaming.consumerContinuation = nil
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
                     return .init(
-                        callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken(),
+                        callbackToken: streaming.hasOutstandingDemand ? nil : nextCallbackToken(),
                         continuationAndElement: (consumerContinuation, element)
                     )
                 } else {
                     // We don't have a suspended consumer so we just buffer the elements
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
                     return .init(
-                        callbackToken: streaming.hasOutstandingDemand ? nil : self.nextCallbackToken()
+                        callbackToken: streaming.hasOutstandingDemand ? nil : nextCallbackToken()
                     )
                 }
 
@@ -1576,7 +1576,7 @@ extension BufferedStream {
             callbackToken: Source.WriteResult.CallbackToken,
             onProduceMore: @Sendable @escaping (Result<Void, any Error>) -> Void
         ) -> EnqueueProducerAction? {
-            switch self._state {
+            switch _state {
             case .initial:
                 // We need to transition to streaming before we can suspend
                 // This is enforced because the CallbackToken has no internal init so
@@ -1586,19 +1586,19 @@ extension BufferedStream {
             case .streaming(var streaming):
                 if let index = streaming.cancelledAsyncProducers.firstIndex(of: callbackToken.id) {
                     // Our producer got marked as cancelled.
-                    self._state = .modify
+                    _state = .modify
                     streaming.cancelledAsyncProducers.remove(at: index)
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                     return .resumeProducerWithError(onProduceMore, CancellationError())
                 } else if streaming.hasOutstandingDemand {
                     // We hit an edge case here where we wrote but the consuming thread got interleaved
                     return .resumeProducer(onProduceMore)
                 } else {
-                    self._state = .modify
+                    _state = .modify
                     streaming.producerContinuations.append((callbackToken.id, onProduceMore))
 
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
                     return .none
                 }
 
@@ -1623,7 +1623,7 @@ extension BufferedStream {
         mutating func cancelProducer(
             callbackToken: Source.WriteResult.CallbackToken
         ) -> CancelProducerAction? {
-            switch self._state {
+            switch _state {
             case .initial:
                 // We need to transition to streaming before we can suspend
                 fatalError("AsyncStream internal inconsistency")
@@ -1633,17 +1633,17 @@ extension BufferedStream {
                     $0.0 == callbackToken.id
                 }) {
                     // We have an enqueued producer that we need to resume now
-                    self._state = .modify
+                    _state = .modify
                     let continuation = streaming.producerContinuations.remove(at: index).1
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                     return .resumeProducerWithCancellationError(continuation)
                 } else {
                     // The task that yields was cancelled before yielding so the cancellation handler
                     // got invoked right away
-                    self._state = .modify
+                    _state = .modify
                     streaming.cancelledAsyncProducers.append(callbackToken.id)
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                     return .none
                 }
@@ -1678,11 +1678,11 @@ extension BufferedStream {
 
         @inlinable
         mutating func finish(_ failure: (any Error)?) -> FinishAction? {
-            switch self._state {
+            switch _state {
             case .initial(let initial):
                 // Nothing was yielded nor did anybody call next
                 // This means we can transition to sourceFinished and store the failure
-                self._state = .sourceFinished(
+                _state = .sourceFinished(
                     .init(
                         iteratorInitialized: initial.iteratorInitialized,
                         buffer: .init(),
@@ -1704,7 +1704,7 @@ extension BufferedStream {
                         "Expected no suspended producers"
                     )
 
-                    self._state = .finished(iteratorInitialized: streaming.iteratorInitialized)
+                    _state = .finished(iteratorInitialized: streaming.iteratorInitialized)
 
                     return .resumeConsumerAndCallOnTermination(
                         consumerContinuation: consumerContinuation,
@@ -1712,7 +1712,7 @@ extension BufferedStream {
                         onTermination: streaming.onTermination
                     )
                 } else {
-                    self._state = .sourceFinished(
+                    _state = .sourceFinished(
                         .init(
                             iteratorInitialized: streaming.iteratorInitialized,
                             buffer: streaming.buffer,
@@ -1752,11 +1752,11 @@ extension BufferedStream {
 
         @inlinable
         mutating func next() -> NextAction {
-            switch self._state {
+            switch _state {
             case .initial(let initial):
                 // We are not interacting with the back-pressure strategy here because
                 // we are doing this inside `next(:)`
-                self._state = .streaming(
+                _state = .streaming(
                     .init(
                         backPressureStrategy: initial.backPressureStrategy,
                         iteratorInitialized: initial.iteratorInitialized,
@@ -1776,7 +1776,7 @@ extension BufferedStream {
                     fatalError("AsyncStream internal inconsistency")
                 }
 
-                self._state = .modify
+                _state = .modify
 
                 if let element = streaming.buffer.popFirst() {
                     // We have an element to fulfil the demand right away.
@@ -1786,33 +1786,33 @@ extension BufferedStream {
                         // There is demand and we have to resume our producers
                         let producers = Array(streaming.producerContinuations.map { $0.1 })
                         streaming.producerContinuations.removeAll()
-                        self._state = .streaming(streaming)
+                        _state = .streaming(streaming)
                         return .returnElementAndResumeProducers(element, producers)
                     } else {
                         // We don't have any new demand, so we can just return the element.
-                        self._state = .streaming(streaming)
+                        _state = .streaming(streaming)
                         return .returnElement(element)
                     }
                 } else {
                     // There is nothing in the buffer to fulfil the demand so we need to suspend.
                     // We are not interacting with the back-pressure strategy here because
                     // we are doing this inside `suspendNext`
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                     return .suspendTask
                 }
 
             case .sourceFinished(var sourceFinished):
                 // Check if we have an element left in the buffer and return it
-                self._state = .modify
+                _state = .modify
 
                 if let element = sourceFinished.buffer.popFirst() {
-                    self._state = .sourceFinished(sourceFinished)
+                    _state = .sourceFinished(sourceFinished)
 
                     return .returnElement(element)
                 } else {
                     // We are returning the queued failure now and can transition to finished
-                    self._state = .finished(iteratorInitialized: sourceFinished.iteratorInitialized)
+                    _state = .finished(iteratorInitialized: sourceFinished.iteratorInitialized)
 
                     return .returnErrorAndCallOnTermination(
                         sourceFinished.failure,
@@ -1853,7 +1853,7 @@ extension BufferedStream {
         mutating func suspendNext(
             continuation: CheckedContinuation<Element?, any Error>
         ) -> SuspendNextAction? {
-            switch self._state {
+            switch _state {
             case .initial:
                 // We need to transition to streaming before we can suspend
                 preconditionFailure("AsyncStream internal inconsistency")
@@ -1866,7 +1866,7 @@ extension BufferedStream {
                     )
                 }
 
-                self._state = .modify
+                _state = .modify
 
                 // We have to check here again since we might have a producer interleave next and suspendNext
                 if let element = streaming.buffer.popFirst() {
@@ -1878,7 +1878,7 @@ extension BufferedStream {
                         // There is demand and we have to resume our producers
                         let producers = Array(streaming.producerContinuations.map { $0.1 })
                         streaming.producerContinuations.removeAll()
-                        self._state = .streaming(streaming)
+                        _state = .streaming(streaming)
                         return .resumeConsumerWithElementAndProducers(
                             continuation,
                             element,
@@ -1886,28 +1886,28 @@ extension BufferedStream {
                         )
                     } else {
                         // We don't have any new demand, so we can just return the element.
-                        self._state = .streaming(streaming)
+                        _state = .streaming(streaming)
                         return .resumeConsumerWithElement(continuation, element)
                     }
                 } else {
                     // There is nothing in the buffer to fulfil the demand so we to store the continuation.
                     streaming.consumerContinuation = continuation
-                    self._state = .streaming(streaming)
+                    _state = .streaming(streaming)
 
                     return .none
                 }
 
             case .sourceFinished(var sourceFinished):
                 // Check if we have an element left in the buffer and return it
-                self._state = .modify
+                _state = .modify
 
                 if let element = sourceFinished.buffer.popFirst() {
-                    self._state = .sourceFinished(sourceFinished)
+                    _state = .sourceFinished(sourceFinished)
 
                     return .resumeConsumerWithElement(continuation, element)
                 } else {
                     // We are returning the queued failure now and can transition to finished
-                    self._state = .finished(iteratorInitialized: sourceFinished.iteratorInitialized)
+                    _state = .finished(iteratorInitialized: sourceFinished.iteratorInitialized)
 
                     return .resumeConsumerWithErrorAndCallOnTermination(
                         continuation,
@@ -1938,13 +1938,13 @@ extension BufferedStream {
 
         @inlinable
         mutating func cancelNext() -> CancelNextAction? {
-            switch self._state {
+            switch _state {
             case .initial:
                 // We need to transition to streaming before we can suspend
                 fatalError("AsyncStream internal inconsistency")
 
             case .streaming(let streaming):
-                self._state = .finished(iteratorInitialized: streaming.iteratorInitialized)
+                _state = .finished(iteratorInitialized: streaming.iteratorInitialized)
 
                 if let consumerContinuation = streaming.consumerContinuation {
                     precondition(
