@@ -122,21 +122,21 @@ final class LockStorage<Value>: ManagedBuffer<Value, LockPrimitive> {
 
   @inlinable
   func lock() {
-    withUnsafeMutablePointerToElements { lockPtr in
+    self.withUnsafeMutablePointerToElements { lockPtr in
       LockOperations.lock(lockPtr)
     }
   }
 
   @inlinable
   func unlock() {
-    withUnsafeMutablePointerToElements { lockPtr in
+    self.withUnsafeMutablePointerToElements { lockPtr in
       LockOperations.unlock(lockPtr)
     }
   }
 
   @usableFromInline
   deinit {
-    withUnsafeMutablePointerToElements { lockPtr in
+    self.withUnsafeMutablePointerToElements { lockPtr in
       LockOperations.destroy(lockPtr)
     }
   }
@@ -145,14 +145,14 @@ final class LockStorage<Value>: ManagedBuffer<Value, LockPrimitive> {
   func withLockPrimitive<T>(
     _ body: (UnsafeMutablePointer<LockPrimitive>) throws -> T
   ) rethrows -> T {
-    try withUnsafeMutablePointerToElements { lockPtr in
+    try self.withUnsafeMutablePointerToElements { lockPtr in
       return try body(lockPtr)
     }
   }
 
   @inlinable
   func withLockedValue<T>(_ mutate: (inout Value) throws -> T) rethrows -> T {
-    try withUnsafeMutablePointers { valuePtr, lockPtr in
+    try self.withUnsafeMutablePointers { valuePtr, lockPtr in
       LockOperations.lock(lockPtr)
       defer { LockOperations.unlock(lockPtr) }
       return try mutate(&valuePtr.pointee)
@@ -187,7 +187,7 @@ struct Lock {
   /// `unlock`, to simplify lock handling.
   @inlinable
   func lock() {
-    _storage.lock()
+    self._storage.lock()
   }
 
   /// Release the lock.
@@ -196,14 +196,14 @@ struct Lock {
   /// `lock`, to simplify lock handling.
   @inlinable
   func unlock() {
-    _storage.unlock()
+    self._storage.unlock()
   }
 
   @inlinable
   internal func withLockPrimitive<T>(
     _ body: (UnsafeMutablePointer<LockPrimitive>) throws -> T
   ) rethrows -> T {
-    return try _storage.withLockPrimitive(body)
+    return try self._storage.withLockPrimitive(body)
   }
 }
 
@@ -218,9 +218,9 @@ extension Lock {
   /// - Returns: The value returned by the block.
   @inlinable
   func withLock<T>(_ body: () throws -> T) rethrows -> T {
-    lock()
+    self.lock()
     defer {
-      unlock()
+      self.unlock()
     }
     return try body()
   }
@@ -247,7 +247,7 @@ struct LockedValueBox<Value> {
 
   @inlinable
   func withLockedValue<T>(_ mutate: (inout Value) throws -> T) rethrows -> T {
-    return try storage.withLockedValue(mutate)
+    return try self.storage.withLockedValue(mutate)
   }
 }
 
