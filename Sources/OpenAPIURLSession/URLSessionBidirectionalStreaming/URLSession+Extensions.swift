@@ -16,7 +16,7 @@ import HTTPTypes
 #if canImport(Darwin)
 import Foundation
 
-@available(macOS 12, iOS 15, tvOS 15, watchOS 8, *) extension URLSession {
+@available(macOS 12, iOS 15, tvOS 15, watchOS 8, visionOS 1, *) extension URLSession {
     func bidirectionalStreamingRequest(
         for request: HTTPRequest,
         baseURL: URL,
