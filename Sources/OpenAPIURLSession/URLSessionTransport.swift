@@ -193,7 +193,18 @@ extension URLRequest {
         }
         self.init(url: url)
         self.httpMethod = request.method.rawValue
-        for header in request.headerFields { setValue(header.value, forHTTPHeaderField: header.name.canonicalName) }
+        var cookies = [String]()
+        for header in request.headerFields {
+            if header.name == .cookie {
+                cookies.append(header.value)
+            } else {
+                setValue(header.value, forHTTPHeaderField: header.name.canonicalName)
+            }
+        }
+        if !cookies.isEmpty {
+            let cookie = cookies.joined(separator: "; ")
+            setValue(cookie, forHTTPHeaderField: HTTPField.Name.cookie.canonicalName)
+        }
     }
 }
 
