@@ -58,3 +58,11 @@ let package = Package(
 
 // Test-only dependencies.
 package.dependencies += [.package(url: "https://github.com/apple/swift-nio", from: "2.62.0")]
+
+for target in package.targets {
+    if target.type != .plugin {
+        var settings = target.swiftSettings ?? []
+        settings.append(.enableUpcomingFeature("MemberImportVisibility"))
+        target.swiftSettings = settings
+    }
+}
