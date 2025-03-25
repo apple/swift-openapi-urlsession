@@ -71,14 +71,14 @@ public struct URLSessionTransport: ClientTransport {
         ///   If none is provided, the system uses the shared URLSession.
         public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
 
-        enum Implementation {
+        public enum Implementation: Sendable {
             case buffering
             case streaming(requestBodyStreamBufferSize: Int, responseBodyStreamWatermarks: (low: Int, high: Int))
         }
 
-        var implementation: Implementation
+        public var implementation: Implementation
 
-        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+        public init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
             self.session = session
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
@@ -352,7 +352,7 @@ extension URLSessionTransport.Configuration.Implementation {
         #endif
     }
 
-    static var platformDefault: Self {
+    public static var platformDefault: Self {
         guard platformSupportsStreaming else { return .buffering }
         return .streaming(
             requestBodyStreamBufferSize: 16 * 1024,
