@@ -70,7 +70,6 @@ public struct URLSessionTransport: ClientTransport {
         /// - Parameter session: The URLSession used for performing HTTP operations.
         ///   If none is provided, the system uses the shared URLSession.
         public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
-        
         /// Specifies the mode in which HTTP request and response bodies are processed.
         public enum HTTPBodyProcessingMode {
             /// Processes the HTTP body incrementally as bytes become available.
@@ -85,15 +84,15 @@ public struct URLSessionTransport: ClientTransport {
             /// Use this mode when it's necessary or simpler to handle complete data payloads at once.
             case buffered
         }
-        
+        /// Creates a new configuration with the provided session.
+        /// - Parameters:
+        ///   - session: The URLSession used for performing HTTP operations.
+        ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
         public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode) {
             self.session = session
             switch httpBodyProcessingMode {
-                
-            case .streamed:
-                self.implementation = .defaultStreaming
-            case .buffered:
-                self.implementation = .buffering
+            case .streamed: self.implementation = .defaultStreaming
+            case .buffered: self.implementation = .buffering
             }
         }
 
@@ -382,7 +381,6 @@ extension URLSessionTransport.Configuration.Implementation {
         guard platformSupportsStreaming else { return .buffering }
         return .defaultStreaming
     }
-    
     static var defaultStreaming: Self {
         .streaming(
             requestBodyStreamBufferSize: 16 * 1024,
