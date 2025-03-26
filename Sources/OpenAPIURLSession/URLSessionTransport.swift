@@ -97,7 +97,7 @@ public struct URLSessionTransport: ClientTransport {
             }
         }
 
-        enum Implementation: Sendable {
+        enum Implementation {
             case buffering
             case streaming(requestBodyStreamBufferSize: Int, responseBodyStreamWatermarks: (low: Int, high: Int))
         }
