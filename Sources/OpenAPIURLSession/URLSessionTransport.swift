@@ -378,7 +378,7 @@ extension URLSessionTransport.Configuration.Implementation {
         #endif
     }
 
-    public static var platformDefault: Self {
+    static var platformDefault: Self {
         guard platformSupportsStreaming else { return .buffering }
         return .defaultStreaming
     }
