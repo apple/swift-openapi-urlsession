@@ -70,15 +70,41 @@ public struct URLSessionTransport: ClientTransport {
         /// - Parameter session: The URLSession used for performing HTTP operations.
         ///   If none is provided, the system uses the shared URLSession.
         public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
+        
+        /// Specifies the mode in which HTTP request and response bodies are processed.
+        public enum HTTPBodyProcessingMode {
+            /// Processes the HTTP body incrementally as bytes become available.
+            ///
+            /// Use this mode to handle large payloads efficiently or to begin processing
+            /// before the entire body has been received. Will throw a `URLSessionTransportError.streamingNotSupported`
+            /// error if not available on the platform.
+            case streamed
 
-        public enum Implementation: Sendable {
+            /// Waits until the entire HTTP body has been received before processing begins.
+            ///
+            /// Use this mode when it's necessary or simpler to handle complete data payloads at once.
+            case buffered
+        }
+        
+        public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode) {
+            self.session = session
+            switch httpBodyProcessingMode {
+                
+            case .streamed:
+                self.implementation = .defaultStreaming
+            case .buffered:
+                self.implementation = .buffering
+            }
+        }
+
+        enum Implementation: Sendable {
             case buffering
             case streaming(requestBodyStreamBufferSize: Int, responseBodyStreamWatermarks: (low: Int, high: Int))
         }
 
-        public var implementation: Implementation
+        var implementation: Implementation
 
-        public init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
             self.session = session
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
@@ -354,7 +380,11 @@ extension URLSessionTransport.Configuration.Implementation {
 
     public static var platformDefault: Self {
         guard platformSupportsStreaming else { return .buffering }
-        return .streaming(
+        return .defaultStreaming
+    }
+    
+    static var defaultStreaming: Self {
+        .streaming(
             requestBodyStreamBufferSize: 16 * 1024,
             responseBodyStreamWatermarks: (low: 16 * 1024, high: 32 * 1024)
         )
