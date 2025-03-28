@@ -67,33 +67,36 @@ public struct URLSessionTransport: ClientTransport {
         public var session: URLSession
 
         /// Creates a new configuration with the provided session.
-        /// - Parameter session: The URLSession used for performing HTTP operations.
-        ///   If none is provided, the system uses the shared URLSession.
-        public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
+        /// - Parameters:
+        ///   - session: The URLSession used for performing HTTP operations.
+        ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
+        public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault) {
+            self.session = session
+            let implementation = httpBodyProcessingMode.implementation
+            if case .streaming = implementation {
+                precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
+            }
+            self.implementation = implementation
+        }
         /// Specifies the mode in which HTTP request and response bodies are processed.
-        public enum HTTPBodyProcessingMode {
+        public struct HTTPBodyProcessingMode {
+            /// Exposing the internal implementation directly.
+            fileprivate let implementation: Configuration.Implementation
+
+            private init(_ implementation: Configuration.Implementation) { self.implementation = implementation }
+
             /// Processes the HTTP body incrementally as bytes become available.
             ///
             /// Use this mode to handle large payloads efficiently or to begin processing
             /// before the entire body has been received. Will throw a `URLSessionTransportError.streamingNotSupported`
             /// error if not available on the platform.
-            case streamed
-
+            public static let streamed = HTTPBodyProcessingMode(.defaultStreaming)
             /// Waits until the entire HTTP body has been received before processing begins.
             ///
             /// Use this mode when it's necessary or simpler to handle complete data payloads at once.
-            case buffered
-        }
-        /// Creates a new configuration with the provided session.
-        /// - Parameters:
-        ///   - session: The URLSession used for performing HTTP operations.
-        ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode) {
-            self.session = session
-            switch httpBodyProcessingMode {
-            case .streamed: self.implementation = .defaultStreaming
-            case .buffered: self.implementation = .buffering
-            }
+            public static let buffered = HTTPBodyProcessingMode(.buffering)
+            /// Automatically chooses the optimal transport mode, based on the platform being used.
+            public static let platformDefault = HTTPBodyProcessingMode(.platformDefault)
         }
 
         enum Implementation {
@@ -103,13 +106,6 @@ public struct URLSessionTransport: ClientTransport {
 
         var implementation: Implementation
 
-        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
-            self.session = session
-            if case .streaming = implementation {
-                precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
-            }
-            self.implementation = implementation
-        }
     }
 
     /// A set of configuration values used by the transport.
