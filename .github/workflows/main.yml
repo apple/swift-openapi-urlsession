@@ -26,3 +26,8 @@ jobs:
     uses: apple/swift-nio/.github/workflows/macos_tests.yml@main
     with:
       build_scheme: swift-openapi-urlsession
+
+  android-tests:
+    name: Android tests
+    uses: skiptools/swift-android-action@v2
+
