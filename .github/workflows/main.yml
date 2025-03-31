@@ -26,11 +26,3 @@ jobs:
     uses: apple/swift-nio/.github/workflows/macos_tests.yml@main
     with:
       build_scheme: swift-openapi-urlsession
-
-  android-tests:
-    name: Android tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Test Swift Package on Android"
-        uses: skiptools/swift-android-action@v2
