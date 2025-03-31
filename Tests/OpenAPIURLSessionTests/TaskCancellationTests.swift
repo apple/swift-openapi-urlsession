@@ -16,6 +16,7 @@
 import Foundation
 import HTTPTypes
 import NIO
+import NIOHTTP1
 import OpenAPIRuntime
 import XCTest
 @testable import OpenAPIURLSession

@@ -34,7 +34,7 @@ let package = Package(
     platforms: [.macOS(.v10_15), .macCatalyst(.v13), .iOS(.v13), .tvOS(.v13), .watchOS(.v6), .visionOS(.v1)],
     products: [.library(name: "OpenAPIURLSession", targets: ["OpenAPIURLSession"])],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.8.2"),
         .package(url: "https://github.com/apple/swift-http-types", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
     ],
@@ -50,14 +50,21 @@ let package = Package(
         ),
         .testTarget(
             name: "OpenAPIURLSessionTests",
-            dependencies: ["OpenAPIURLSession", .product(name: "NIOTestUtils", package: "swift-nio")],
+            dependencies: ["OpenAPIURLSession"],
             swiftSettings: swiftSettings
         ),
     ]
 )
 
+#if !os(Windows) // NIO not yet supported on Windows
 // Test-only dependencies.
 package.dependencies += [.package(url: "https://github.com/apple/swift-nio", from: "2.62.0")]
+package.targets.forEach { target in
+    if target.name == "OpenAPIURLSessionTests" {
+        target.dependencies += [.product(name: "NIOTestUtils", package: "swift-nio")]
+    }
+}
+#endif
 
 // ---    STANDARD CROSS-REPO SETTINGS DO NOT EDIT   --- //
 for target in package.targets {
