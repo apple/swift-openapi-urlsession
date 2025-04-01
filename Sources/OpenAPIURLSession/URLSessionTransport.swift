@@ -99,6 +99,7 @@ public struct URLSessionTransport: ClientTransport {
         }
 
         var implementation: Implementation
+
         init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
             self.session = session
             if case .streaming = implementation {
@@ -106,7 +107,6 @@ public struct URLSessionTransport: ClientTransport {
             }
             self.implementation = implementation
         }
-
     }
 
     /// A set of configuration values used by the transport.
