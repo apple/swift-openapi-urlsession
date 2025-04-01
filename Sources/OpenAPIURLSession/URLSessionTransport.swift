@@ -78,7 +78,7 @@ public struct URLSessionTransport: ClientTransport {
         /// Creates a new configuration with the provided session.
         /// - Parameter session: The URLSession used for performing HTTP operations.
         ///   If none is provided, the system uses the shared URLSession.
-        public init(session: URLSession) { self.init(session: session, implementation: .platformDefault) }
+        public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
         /// Specifies the mode in which HTTP request and response bodies are processed.
         public struct HTTPBodyProcessingMode: Sendable {
             /// Exposing the internal implementation directly.
