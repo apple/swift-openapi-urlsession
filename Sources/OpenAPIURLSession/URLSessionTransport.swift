@@ -74,8 +74,10 @@ public struct URLSessionTransport: ClientTransport {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation)
         }
+        /// Creates a new configuration with the provided session.
+        /// - Parameter session: The URLSession used for performing HTTP operations.
+        public init(session: URLSession) { self.init(session: session, implementation: .platformDefault) }
         /// Specifies the mode in which HTTP request and response bodies are processed.
-
         public struct HTTPBodyProcessingMode: Sendable {
             /// Exposing the internal implementation directly.
             fileprivate let implementation: Configuration.Implementation
