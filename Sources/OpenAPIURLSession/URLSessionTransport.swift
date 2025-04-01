@@ -114,9 +114,7 @@ public struct URLSessionTransport: ClientTransport {
 
     /// Creates a new URLSession-based transport.
     /// - Parameter configuration: A set of configuration values used by the transport.
-    public init(configuration: Configuration = .init(httpBodyProcessingMode: .platformDefault)) {
-        self.configuration = configuration
-    }
+    public init(configuration: Configuration = .init()) { self.configuration = configuration }
 
     /// Sends the underlying HTTP request and returns the received HTTP response.
     /// - Parameters:
