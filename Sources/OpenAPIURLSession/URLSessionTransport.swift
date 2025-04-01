@@ -69,7 +69,7 @@ public struct URLSessionTransport: ClientTransport {
         /// Creates a new configuration with the provided session.
         /// - Parameters:
         ///   - session: The URLSession used for performing HTTP operations.
-        /// If none is provided, the system uses the shared URLSession.
+        ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
         public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault) {
             let implementation = httpBodyProcessingMode.implementation
@@ -77,7 +77,7 @@ public struct URLSessionTransport: ClientTransport {
         }
         /// Creates a new configuration with the provided session.
         /// - Parameter session: The URLSession used for performing HTTP operations.
-        /// If none is provided, the system uses the shared URLSession.
+        ///   If none is provided, the system uses the shared URLSession.
         public init(session: URLSession) { self.init(session: session, implementation: .platformDefault) }
         /// Specifies the mode in which HTTP request and response bodies are processed.
         public struct HTTPBodyProcessingMode: Sendable {

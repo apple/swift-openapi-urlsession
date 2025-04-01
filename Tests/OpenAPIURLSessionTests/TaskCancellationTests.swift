@@ -18,7 +18,6 @@ import HTTPTypes
 import NIO
 import OpenAPIRuntime
 import XCTest
-import NIOHTTP1
 @testable import OpenAPIURLSession
 
 enum CancellationPoint: CaseIterable {
