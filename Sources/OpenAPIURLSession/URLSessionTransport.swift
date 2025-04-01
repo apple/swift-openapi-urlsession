@@ -85,17 +85,10 @@ public struct URLSessionTransport: ClientTransport {
 
             private init(_ implementation: Configuration.Implementation) { self.implementation = implementation }
 
-            /// Processes the HTTP body incrementally as bytes become available.
-            ///
-            /// Use this mode to handle large payloads efficiently or to begin processing
-            /// before the entire body has been received. Will throw a `URLSessionTransportError.streamingNotSupported`
-            /// error if not available on the platform.
-            public static let streamed = HTTPBodyProcessingMode(.defaultStreaming)
-            /// Waits until the entire HTTP body has been received before processing begins.
-            ///
-            /// Use this mode when it's necessary or simpler to handle complete data payloads at once.
+            /// Use this mode to force URLSessionTransport to transfer data in a buffered mode, even if
+            /// streaming would be available on the platform.
             public static let buffered = HTTPBodyProcessingMode(.buffering)
-            /// Automatically chooses the optimal transport mode, based on the platform being used.
+            /// Data is transfered via streaming if available on the platform, else it falls back to buffering.
             public static let platformDefault = HTTPBodyProcessingMode(.platformDefault)
         }
 
@@ -375,10 +368,7 @@ extension URLSessionTransport.Configuration.Implementation {
 
     static var platformDefault: Self {
         guard platformSupportsStreaming else { return .buffering }
-        return .defaultStreaming
-    }
-    static var defaultStreaming: Self {
-        .streaming(
+        return .streaming(
             requestBodyStreamBufferSize: 16 * 1024,
             responseBodyStreamWatermarks: (low: 16 * 1024, high: 32 * 1024)
         )
