@@ -71,15 +71,12 @@ public struct URLSessionTransport: ClientTransport {
         ///   - session: The URLSession used for performing HTTP operations.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
         public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault) {
-            self.session = session
             let implementation = httpBodyProcessingMode.implementation
-            if case .streaming = implementation {
-                precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
-            }
-            self.implementation = implementation
+            self.init(session: session, implementation: implementation)
         }
         /// Specifies the mode in which HTTP request and response bodies are processed.
-        public struct HTTPBodyProcessingMode {
+       
+        public struct HTTPBodyProcessingMode: Sendable {
             /// Exposing the internal implementation directly.
             fileprivate let implementation: Configuration.Implementation
 
@@ -98,6 +95,14 @@ public struct URLSessionTransport: ClientTransport {
         }
 
         var implementation: Implementation
+        
+        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+            self.session = session
+            if case .streaming = implementation {
+                precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
+            }
+            self.implementation = implementation
+        }
 
     }
 
@@ -106,7 +111,7 @@ public struct URLSessionTransport: ClientTransport {
 
     /// Creates a new URLSession-based transport.
     /// - Parameter configuration: A set of configuration values used by the transport.
-    public init(configuration: Configuration = .init()) { self.configuration = configuration }
+    public init(configuration: Configuration = .init(httpBodyProcessingMode: .platformDefault)) { self.configuration = configuration }
 
     /// Sends the underlying HTTP request and returns the received HTTP response.
     /// - Parameters:
