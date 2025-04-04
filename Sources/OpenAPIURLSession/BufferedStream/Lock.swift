@@ -30,10 +30,17 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WinSDK
 #endif
 
+#if os(Windows)
+@usableFromInline
+typealias LockPrimitive = SRWLOCK
+#else
 @usableFromInline
 typealias LockPrimitive = pthread_mutex_t
+#endif
 
 @usableFromInline
 enum LockOperations {}
@@ -43,35 +50,51 @@ extension LockOperations {
   static func create(_ mutex: UnsafeMutablePointer<LockPrimitive>) {
     mutex.assertValidAlignment()
 
+    #if os(Windows)
+    InitializeSRWLock(mutex)
+    #else
     var attr = pthread_mutexattr_t()
     pthread_mutexattr_init(&attr)
 
     let err = pthread_mutex_init(mutex, &attr)
     precondition(err == 0, "\(#function) failed in pthread_mutex with error \(err)")
+    #endif
   }
 
   @inlinable
   static func destroy(_ mutex: UnsafeMutablePointer<LockPrimitive>) {
     mutex.assertValidAlignment()
 
+    #if os(Windows)
+    // SRWLOCK does not need to be freed
+    #else
     let err = pthread_mutex_destroy(mutex)
     precondition(err == 0, "\(#function) failed in pthread_mutex with error \(err)")
+    #endif
   }
 
   @inlinable
   static func lock(_ mutex: UnsafeMutablePointer<LockPrimitive>) {
     mutex.assertValidAlignment()
 
+    #if os(Windows)
+    AcquireSRWLockExclusive(mutex)
+    #else
     let err = pthread_mutex_lock(mutex)
     precondition(err == 0, "\(#function) failed in pthread_mutex with error \(err)")
+    #endif
   }
 
   @inlinable
   static func unlock(_ mutex: UnsafeMutablePointer<LockPrimitive>) {
     mutex.assertValidAlignment()
 
+    #if os(Windows)
+    ReleaseSRWLockExclusive(mutex)
+    #else
     let err = pthread_mutex_unlock(mutex)
     precondition(err == 0, "\(#function) failed in pthread_mutex with error \(err)")
+    #endif
   }
 }
 
