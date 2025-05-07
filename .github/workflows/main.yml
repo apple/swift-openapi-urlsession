@@ -11,7 +11,6 @@ jobs:
     name: Unit tests
     uses: apple/swift-nio/.github/workflows/unit_tests.yml@main
     with:
-      linux_5_9_arguments_override: "-Xswiftc -warnings-as-errors -Xswiftc -strict-concurrency=complete --explicit-target-dependency-import-check error"
       # Disable strict concurrency checking as it intersects badly with
       # warnings-as-errors on 5.10 and later as SwiftPMs generated test manifest
       # has a non-sendable global property.
