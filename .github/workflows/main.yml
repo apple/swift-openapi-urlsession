@@ -35,3 +35,7 @@ jobs:
     with:
       runner_pool: nightly
       build_scheme: swift-openapi-urlsession
+
+  static-sdk:
+    name: Static SDK
+    uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
