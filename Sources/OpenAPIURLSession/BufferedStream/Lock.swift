@@ -30,6 +30,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Bionic)
+import Bionic
 #elseif os(Windows)
 import WinSDK
 #endif
