@@ -43,3 +43,7 @@ jobs:
     with:
       runner_pool: general
       build_scheme: swift-openapi-urlsession
+
+  release-builds:
+    name: Release builds
+    uses: apple/swift-nio/.github/workflows/release_builds.yml@main
