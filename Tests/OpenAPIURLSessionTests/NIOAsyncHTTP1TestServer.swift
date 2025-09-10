@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+#if !os(Windows)  // NIO not yet supported on Windows
 import NIOCore
 import NIOPosix
 import NIOHTTP1
@@ -93,3 +94,4 @@ extension AsyncTestHTTP1Server {
     }
 
 }
+#endif

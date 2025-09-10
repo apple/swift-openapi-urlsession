@@ -16,8 +16,10 @@ import Foundation
 import FoundationNetworking
 #endif
 import HTTPTypes
+#if !os(Windows)  // NIO not yet supported on Windows
 import NIO
 import NIOHTTP1
+#endif
 import OpenAPIRuntime
 import XCTest
 @testable import OpenAPIURLSession
@@ -59,6 +61,7 @@ class URLSessionTransportConverterTests: XCTestCase {
     }
 }
 
+#if !os(Windows)  // NIO not yet supported on Windows
 // swift-format-ignore: AllPublicDeclarationsHaveDocumentation
 class URLSessionTransportBufferedTests: XCTestCase {
     var transport: URLSessionTransport!
@@ -131,22 +134,6 @@ class URLSessionTransportStreamingTests: XCTestCase {
         )
     }
     #endif
-}
-
-class URLSessionTransportPlatformSupportTests: XCTestCase {
-    func testDefaultsToStreamingIfSupported() {
-        if URLSessionTransport.Configuration.Implementation.platformSupportsStreaming {
-            guard case .streaming = URLSessionTransport.Configuration.Implementation.platformDefault else {
-                XCTFail()
-                return
-            }
-        } else {
-            guard case .buffering = URLSessionTransport.Configuration.Implementation.platformDefault else {
-                XCTFail()
-                return
-            }
-        }
-    }
 }
 
 func testHTTPRedirect(
@@ -313,6 +300,23 @@ func testHTTPBasicPost(transport: any ClientTransport) async throws {
         XCTAssertEqual(receivedMessage, responseBodyMessage)
 
         group.cancelAll()
+    }
+}
+#endif
+
+class URLSessionTransportPlatformSupportTests: XCTestCase {
+    func testDefaultsToStreamingIfSupported() {
+        if URLSessionTransport.Configuration.Implementation.platformSupportsStreaming {
+            guard case .streaming = URLSessionTransport.Configuration.Implementation.platformDefault else {
+                XCTFail()
+                return
+            }
+        } else {
+            guard case .buffering = URLSessionTransport.Configuration.Implementation.platformDefault else {
+                XCTFail()
+                return
+            }
+        }
     }
 }
 
