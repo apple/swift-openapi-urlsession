@@ -19,8 +19,8 @@ import NIOHTTP1
 
 final class AsyncTestHTTP1Server {
 
-    typealias ConnectionHandler = @Sendable (NIOAsyncChannel<HTTPServerRequestPart, HTTPServerByteBufferResponsePart>)
-        async throws -> Void
+    typealias ConnectionHandler =
+        @Sendable (NIOAsyncChannel<HTTPServerRequestPart, HTTPServerByteBufferResponsePart>) async throws -> Void
 
     /// Use `start(host:port:connectionHandler:)` instead.
     private init() {}
