@@ -11,7 +11,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
-// swift-format-ignore-file
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the SwiftNIO open source project
