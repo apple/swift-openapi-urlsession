@@ -130,7 +130,7 @@ import DequeModule
 ///
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 @usableFromInline
-internal struct BufferedStream<Element> {
+internal struct BufferedStream<Element: Sendable> {
     @usableFromInline
     final class _Backing: Sendable {
         @usableFromInline
