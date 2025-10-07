@@ -291,12 +291,12 @@ extension URLSessionTransportError: CustomStringConvertible {
     }
 }
 
-private let _debugLoggingEnabled = LockStorage.create(value: false)
+private let _debugLoggingEnabled = LockedValueBox(false)
 var debugLoggingEnabled: Bool {
     get { _debugLoggingEnabled.withLockedValue { $0 } }
     set { _debugLoggingEnabled.withLockedValue { $0 = newValue } }
 }
-private let _standardErrorLock = LockStorage.create(value: FileHandle.standardError)
+private let _standardErrorLock = LockedValueBox(FileHandle.standardError)
 func debug(_ message: @autoclosure () -> String, function: String = #function, file: String = #file, line: UInt = #line)
 {
     assert(
