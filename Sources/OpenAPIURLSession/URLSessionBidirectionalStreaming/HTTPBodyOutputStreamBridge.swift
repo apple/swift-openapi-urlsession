@@ -207,8 +207,24 @@ extension HTTPBodyOutputStreamBridge {
             case .waitingForBytes(_):
                 self = .closed(nil)
                 return .closeStream
-            case .initial, .haveBytes, .needBytes, .closed:
-                preconditionFailure("\(#function) called in invalid state: \(self)")
+            case .closed:
+                // Stream was already closed (e.g., due to error or server disconnect).
+                // The producer finished iterating after the close, which is valid.
+                return .none
+            case .haveBytes(_, _, let producerContinuation):
+                // Producer finished but bytes are still pending. This can happen in edge cases
+                // with concurrent operations. Cancel the producer and close the stream.
+                self = .closed(nil)
+                return .cancelProducerAndCloseStream(producerContinuation)
+            case .needBytes(_, let producerContinuation):
+                // Producer finished but was waiting to be resumed. This can happen in edge cases
+                // with concurrent operations. Cancel the producer and close the stream.
+                self = .closed(nil)
+                return .cancelProducerAndCloseStream(producerContinuation)
+            case .initial:
+                // Producer finished before stream was properly initialized.
+                self = .closed(nil)
+                return .closeStream
             }
         }
 

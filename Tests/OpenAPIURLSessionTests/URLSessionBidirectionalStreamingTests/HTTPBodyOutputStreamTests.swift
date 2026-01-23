@@ -291,6 +291,69 @@ class HTTPBodyOutputStreamBridgeTests: XCTestCase {
         }
         await fulfillment(of: [closeExpectation], timeout: 0.1)
     }
+
+    /// Tests that the bridge handles the stream being closed just as the producer finishes.
+    ///
+    /// This simulates a real-world scenario where a server closes the connection
+    /// right as the client finishes sending its request body. The producer completes
+    /// its iteration and calls wroteFinalChunk(), but the stream was already closed
+    /// due to the server disconnect.
+    ///
+    /// Reproduces: https://github.com/apple/swift-openapi-urlsession/issues/75
+    func testHTTPBodyOutputStreamBridgeStreamClosedJustBeforeProducerFinishes() async throws {
+        let chunkSize = 1
+        let streamBufferSize = 1
+        let numBytes = 3
+
+        let requestBytes = (0..<numBytes).map { UInt8($0) }
+        let requestChunks = requestBytes.chunks(of: chunkSize)
+        let requestByteSequence = MockAsyncSequence(elementsToVend: requestChunks, gatingProduction: true)
+        let requestBody = HTTPBody(
+            requestByteSequence,
+            length: .known(Int64(requestBytes.count)),
+            iterationBehavior: .single
+        )
+
+        var inputStream: InputStream?
+        var outputStream: OutputStream?
+        Stream.getBoundStreams(withBufferSize: streamBufferSize, inputStream: &inputStream, outputStream: &outputStream)
+        guard let inputStream, let outputStream else { fatalError("getBoundStreams did not return non-nil streams") }
+
+        let requestStream = HTTPBodyOutputStreamBridge(outputStream, requestBody)
+        let delegate = MockInputStreamDelegate(inputStream: inputStream)
+
+        // Transfer all bytes normally.
+        for i in 0..<requestBytes.count {
+            requestByteSequence.openGate(for: 1)
+            let byte = try await delegate.waitForBytes(maxBytes: 1)?.first
+            XCTAssertEqual(byte, requestBytes[i])
+        }
+
+        // All bytes transferred. Producer is now waiting for the gate to check for more elements.
+        // State should be .waitingForBytes at this point.
+        XCTAssertEqual(requestByteSequence.elementsVended.count, requestBytes.count)
+
+        // Simulate server closing the connection (e.g., after receiving complete request).
+        // This triggers endEncountered on the output stream, transitioning state to .closed.
+        delegate.close()
+
+        // Give the stream queue time to process the close event.
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        // Now let the producer finish its iteration.
+        // It will find no more elements and call wroteFinalChunk().
+        // Before fix: crashes with preconditionFailure because state is .closed
+        // After fix: gracefully handles .closed state
+        requestByteSequence.openGate()
+
+        // Verify the bridge handled this gracefully.
+        let expectation = expectation(description: "bridge handled close gracefully")
+        HTTPBodyOutputStreamBridge.streamQueue.asyncAfter(deadline: .now() + .milliseconds(50)) {
+            XCTAssertEqual(requestStream.outputStream.streamStatus, .closed)
+            expectation.fulfill()
+        }
+        await fulfillment(of: [expectation], timeout: 0.5)
+    }
 }
 
 #endif  // canImport(Darwin)
