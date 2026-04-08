@@ -7,4 +7,5 @@
 **.md
 **.txt
 **Package.swift
+Package@swift-*.swift
 .editorconfig

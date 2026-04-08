@@ -34,7 +34,7 @@ let package = Package(
     platforms: [.macOS(.v10_15), .macCatalyst(.v13), .iOS(.v13), .tvOS(.v13), .watchOS(.v6), .visionOS(.v1)],
     products: [.library(name: "OpenAPIURLSession", targets: ["OpenAPIURLSession"])],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.8.2"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.11.0", traits: []),
         .package(url: "https://github.com/apple/swift-http-types", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
     ],
