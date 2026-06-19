@@ -120,6 +120,18 @@ final class HTTPBodyOutputStreamBridge: NSObject, StreamDelegate {
             break
         }
     }
+
+    func cancel(error: (any Error)? = nil) {
+        debug("Output stream received cancellation request.")
+        Self.streamQueue.async { [self] in
+            switch state {
+            case .initial, .waitingForBytes, .haveBytes, .needBytes:
+                self.performAction(state.errorOccurred(error ?? CancellationError()))
+            case .closed: break
+
+            }
+        }
+    }
 }
 
 extension HTTPBodyOutputStreamBridge {
@@ -186,10 +198,7 @@ extension HTTPBodyOutputStreamBridge {
 
         mutating func errorOccurred(_ error: any Error) -> Action {
             switch self {
-            case .initial:
-                self = .closed(error)
-                return .none
-            case .waitingForBytes(_):
+            case .initial, .waitingForBytes(_):
                 self = .closed(error)
                 return .closeStream
             case .haveBytes(_, _, let producerContinuation):
