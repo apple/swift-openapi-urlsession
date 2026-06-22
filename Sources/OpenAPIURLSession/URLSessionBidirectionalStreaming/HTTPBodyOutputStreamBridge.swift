@@ -207,7 +207,9 @@ extension HTTPBodyOutputStreamBridge {
             case .needBytes(_, let producerContinuation):
                 self = .closed(error)
                 return .cancelProducerAndCloseStream(producerContinuation)
-            case .closed: preconditionFailure("\(#function) called in invalid state: \(self)")
+            case .closed:
+                debug("Ignoring \(#function) event in closed state")
+                return .none
             }
         }
 
@@ -216,8 +218,10 @@ extension HTTPBodyOutputStreamBridge {
             case .waitingForBytes(_):
                 self = .closed(nil)
                 return .closeStream
-            case .initial, .haveBytes, .needBytes, .closed:
-                preconditionFailure("\(#function) called in invalid state: \(self)")
+            case .closed:
+                debug("Ignoring \(#function) event in closed state")
+                return .none
+            case .initial, .haveBytes, .needBytes: preconditionFailure("\(#function) called in invalid state: \(self)")
             }
         }
 
@@ -232,7 +236,10 @@ extension HTTPBodyOutputStreamBridge {
             case .needBytes(_, let producerContinuation):
                 self = .closed(nil)
                 return .cancelProducerAndCloseStream(producerContinuation)
-            case .initial, .closed: preconditionFailure("\(#function) called in invalid state: \(self)")
+            case .closed:
+                debug("Ignoring \(#function) event in closed state")
+                return .none
+            case .initial: preconditionFailure("\(#function) called in invalid state: \(self)")
             }
         }
 

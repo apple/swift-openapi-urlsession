@@ -376,6 +376,44 @@ class HTTPBodyOutputStreamBridgeTests: XCTestCase {
 
     }
 
+    func testWroteFinalChunkIsNoOpWhenAlreadyClosed() {
+        var state = HTTPBodyOutputStreamBridge.State.closed(URLError(.cannotFindHost))
+        guard case .none = state.wroteFinalChunk() else {
+            XCTFail("Expected .none action from wroteFinalChunk() in .closed state")
+            return
+        }
+        guard case .closed = state else {
+            XCTFail("Expected state to remain .closed, got \(state)")
+            return
+        }
+    }
+
+    func testEndEncounteredIsNoOpWhenAlreadyClosed() {
+        var state = HTTPBodyOutputStreamBridge.State.closed(URLError(.cannotFindHost))
+        guard case .none = state.endEncountered() else {
+            XCTFail("Expected .none action from endEncountered() in .closed state")
+            return
+        }
+        guard case .closed = state else {
+            XCTFail("Expected state to remain .closed, got \(state)")
+            return
+        }
+    }
+
+    func testErrorOccurredIsNoOpWhenAlreadyClosed() {
+        let firstError = URLError(.cannotFindHost)
+        var state = HTTPBodyOutputStreamBridge.State.closed(firstError)
+        guard case .none = state.errorOccurred(URLError(.timedOut)) else {
+            XCTFail("Expected .none action from errorOccurred() in .closed state")
+            return
+        }
+        guard case .closed(let storedError) = state else {
+            XCTFail("Expected state to remain .closed, got \(state)")
+            return
+        }
+        XCTAssertEqual((storedError as? URLError)?.code, firstError.code, "First error should win")
+    }
+
     // Wait for given condition to be true within wait duration.
     private func waitForCondition(_ label: String, within waitDuration: TimeInterval = 1.0, condition: () -> Bool)
         async throws
