@@ -72,6 +72,35 @@ class HTTPBodyOutputStreamBridgeTests: XCTestCase {
         )
     }
 
+    func testHTTPBodyOutputStreamEmptyChunkDoesNotCrash() async throws {
+        let emptyChunks: [[UInt8]] = [[]]
+        let requestByteSequence = MockAsyncSequence(elementsToVend: emptyChunks, gatingProduction: false)
+        let requestBody = HTTPBody(requestByteSequence, length: .known(0), iterationBehavior: .single)
+
+        var inputStream: InputStream?
+        var outputStream: OutputStream?
+        Stream.getBoundStreams(withBufferSize: 16, inputStream: &inputStream, outputStream: &outputStream)
+        guard let inputStream, let outputStream else { fatalError("getBoundStreams did not return non-nil streams") }
+
+        let requestStream = HTTPBodyOutputStreamBridge(outputStream, requestBody)
+        let delegate = MockInputStreamDelegate(inputStream: inputStream)
+
+        var data = [UInt8]()
+        while let inputStreamBytes = try await delegate.waitForBytes(maxBytes: 4096) {
+            data.append(contentsOf: inputStreamBytes)
+        }
+        XCTAssertEqual(data, [])
+        XCTAssertEqual(inputStream.streamStatus, .closed)
+        XCTAssertNil(inputStream.streamError)
+
+        HTTPBodyOutputStreamBridge.streamQueue.asyncAndWait(
+            execute: DispatchWorkItem {
+                XCTAssertEqual(requestStream.outputStream.streamStatus, .closed)
+                XCTAssertNil(requestStream.outputStream.streamError)
+            }
+        )
+    }
+
     func testHTTPBodyOutputStreamBridgeBackpressure() async throws {
         let chunkSize = 71
         let streamBufferSize = 37

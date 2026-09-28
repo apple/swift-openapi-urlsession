@@ -63,6 +63,9 @@ final class HTTPBodyOutputStreamBridge: NSObject, StreamDelegate {
         let task = Task {
             dispatchPrecondition(condition: .notOnQueue(Self.streamQueue))
             for try await chunk in httpBody {
+                // Empty chunks are legal HTTPBody values (for example text/plain "")
+                // but OutputStream cannot be written with a zero length buffer.
+                guard !chunk.isEmpty else { continue }
                 try await withCheckedThrowingContinuation { continuation in
                     Self.streamQueue.async {
                         debug("Output stream delegate produced chunk and suspended producer.")
