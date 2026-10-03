@@ -186,7 +186,15 @@ final class LockStorage<Value>: ManagedBuffer<Value, LockPrimitive> {
         }
     }
 
+    // Under `-enable-library-evolution` (BUILD_LIBRARY_FOR_DISTRIBUTION=YES),
+    // Swift 6.3+ rejects an `@inlinable` deinit on a non-`@_fixed_layout` class:
+    // "deinitializer can only be '@inlinable' if the class is '@_fixed_layout'".
+    // Consumers that build this package resiliently can define
+    // OPENAPIURLSESSION_NONINLINABLE_LOCK to drop the attribute; the default
+    // build is unchanged.
+    #if !OPENAPIURLSESSION_NONINLINABLE_LOCK
     @inlinable
+    #endif
     deinit {
         self.withUnsafeMutablePointerToElements { lockPtr in
             LockOperations.destroy(lockPtr)
@@ -231,7 +239,12 @@ struct Lock {
     internal let _storage: LockStorage<Void>
 
     /// Create a new lock.
+    // Under library evolution, an `@inlinable` init may not directly initialize
+    // the stored `_storage` property unless the type is `@frozen`. Consumers
+    // building resiliently can define OPENAPIURLSESSION_NONINLINABLE_LOCK.
+    #if !OPENAPIURLSESSION_NONINLINABLE_LOCK
     @inlinable
+    #endif
     init() {
         self._storage = .create(value: ())
     }
@@ -309,7 +322,11 @@ struct LockedValueBox<Value> {
     internal let _storage: LockStorage<Value>
 
     /// Initialize the `Value`.
+    // See note above: `@inlinable` init cannot initialize stored `_storage`
+    // directly under library evolution unless the type is `@frozen`.
+    #if !OPENAPIURLSESSION_NONINLINABLE_LOCK
     @inlinable
+    #endif
     init(_ value: Value) {
         self._storage = .create(value: value)
     }
