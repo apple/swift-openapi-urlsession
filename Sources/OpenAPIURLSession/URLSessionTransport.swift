@@ -66,14 +66,33 @@ public struct URLSessionTransport: ClientTransport {
         /// The URLSession used for performing HTTP operations.
         public var session: URLSession
 
+        /// An optional closure that modifies a request immediately before its task is created.
+        ///
+        /// The closure runs for both buffered and streaming requests. In streaming mode, the
+        /// request body is provided separately and is not available through `httpBody`.
+        /// Throwing prevents the task from being created. Defaults to `nil`.
+        /// The closure is not invoked again for redirects handled by URLSession.
+        ///
+        /// For example, to add a request header:
+        ///
+        ///     let configuration = URLSessionTransport.Configuration(interceptRequest: { request in
+        ///         request.setValue("custom-value", forHTTPHeaderField: "X-Custom-Header")
+        ///     })
+        public var interceptRequest: (@Sendable (inout URLRequest) throws -> Void)?
+
         /// Creates a new configuration with the provided session.
         /// - Parameters:
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault) {
+        ///   - interceptRequest: An optional closure that modifies each request before its task is created.
+        public init(
+            session: URLSession = .shared,
+            httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
+            interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+        ) {
             let implementation = httpBodyProcessingMode.implementation
-            self.init(session: session, implementation: implementation)
+            self.init(session: session, implementation: implementation, interceptRequest: interceptRequest)
         }
         /// Creates a new configuration with the provided session.
         /// - Parameter session: The URLSession used for performing HTTP operations.
@@ -100,8 +119,13 @@ public struct URLSessionTransport: ClientTransport {
 
         var implementation: Implementation
 
-        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+        init(
+            session: URLSession = .shared,
+            implementation: Implementation,
+            interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+        ) {
             self.session = session
+            self.interceptRequest = interceptRequest
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
             }
@@ -138,7 +162,8 @@ public struct URLSessionTransport: ClientTransport {
                 baseURL: baseURL,
                 requestBody: requestBody,
                 requestStreamBufferSize: requestBodyStreamBufferSize,
-                responseStreamWatermarks: responseBodyStreamWatermarks
+                responseStreamWatermarks: responseBodyStreamWatermarks,
+                interceptRequest: configuration.interceptRequest
             )
             #else
             throw URLSessionTransportError.streamingNotSupported
@@ -147,7 +172,8 @@ public struct URLSessionTransport: ClientTransport {
             return try await configuration.session.bufferedRequest(
                 for: request,
                 baseURL: baseURL,
-                requestBody: requestBody
+                requestBody: requestBody,
+                interceptRequest: configuration.interceptRequest
             )
         }
     }
@@ -313,12 +339,16 @@ func debug(_ message: @autoclosure () -> String, function: String = #function, f
 }
 
 extension URLSession {
-    func bufferedRequest(for request: HTTPRequest, baseURL: URL, requestBody: HTTPBody?) async throws -> (
-        HTTPResponse, HTTPBody?
-    ) {
+    func bufferedRequest(
+        for request: HTTPRequest,
+        baseURL: URL,
+        requestBody: HTTPBody?,
+        interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+    ) async throws -> (HTTPResponse, HTTPBody?) {
         try Task.checkCancellation()
         var urlRequest = try URLRequest(request, baseURL: baseURL)
         if let requestBody { urlRequest.httpBody = try await Data(collecting: requestBody, upTo: .max) }
+        try interceptRequest?(&urlRequest)
         try Task.checkCancellation()
 
         /// Use `dataTask(with:completionHandler:)` here because `data(for:[delegate:]) async` is only available on

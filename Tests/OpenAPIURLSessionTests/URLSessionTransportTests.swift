@@ -76,6 +76,18 @@ class URLSessionTransportBufferedTests: XCTestCase {
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
 
+    func testInterceptGetRequest() async throws {
+        try await testRequestInterception(transport: transport, withBody: false)
+    }
+
+    func testInterceptPostRequest() async throws {
+        try await testRequestInterception(transport: transport, withBody: true)
+    }
+
+    func testThrowingRequestInterceptor() async throws {
+        try await checkThrowingRequestInterceptor(transport: transport)
+    }
+
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
         try await testHTTPRedirect(
@@ -116,6 +128,18 @@ class URLSessionTransportStreamingTests: XCTestCase {
     func testBasicGet() async throws { try await testHTTPBasicGet(transport: transport) }
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
+
+    func testInterceptGetRequest() async throws {
+        try await testRequestInterception(transport: transport, withBody: false)
+    }
+
+    func testInterceptPostRequest() async throws {
+        try await testRequestInterception(transport: transport, withBody: true)
+    }
+
+    func testThrowingRequestInterceptor() async throws {
+        try await checkThrowingRequestInterceptor(transport: transport)
+    }
 
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
@@ -218,7 +242,47 @@ func testHTTPRedirect(
     }
 }
 
-func testHTTPBasicGet(transport: any ClientTransport) async throws {
+private func testRequestInterception(transport: URLSessionTransport, withBody: Bool) async throws {
+    var transport = transport
+    let expectedMethod = withBody ? "POST" : "GET"
+    let expectsBufferedBody: Bool
+    if case .buffering = transport.configuration.implementation {
+        expectsBufferedBody = withBody
+    } else {
+        expectsBufferedBody = false
+    }
+    transport.configuration.interceptRequest = { request in
+        XCTAssertEqual(request.httpMethod, expectedMethod)
+        XCTAssertEqual(request.url?.path, "/hello/world")
+        if expectsBufferedBody { XCTAssertEqual(request.httpBody, Data("Hello, world!".utf8)) }
+        request.setValue("yes", forHTTPHeaderField: "x-intercepted")
+    }
+    if withBody {
+        try await testHTTPBasicPost(transport: transport, expectedInterceptedHeader: "yes")
+    } else {
+        try await testHTTPBasicGet(transport: transport, expectedInterceptedHeader: "yes")
+    }
+}
+
+private enum RequestInterceptorError: Error { case rejected }
+
+private func checkThrowingRequestInterceptor(transport: URLSessionTransport) async throws {
+    var transport = transport
+    transport.configuration.interceptRequest = { _ in throw RequestInterceptorError.rejected }
+    do {
+        _ = try await transport.send(
+            HTTPRequest(method: .get, scheme: nil, authority: nil, path: "/"),
+            body: nil,
+            baseURL: URL(string: "http://127.0.0.1:1")!,
+            operationID: "unused"
+        )
+        XCTFail("Expected the interceptor error")
+    } catch RequestInterceptorError.rejected {
+        // Expected: the interceptor rejects the request before a network task is created.
+    }
+}
+
+func testHTTPBasicGet(transport: any ClientTransport, expectedInterceptedHeader: String? = nil) async throws {
     let requestPath = "/hello/world"
     let responseBodyMessage = "Hey!"
 
@@ -231,6 +295,9 @@ func testHTTPBasicGet(transport: any ClientTransport) async throws {
                     case .head(let head):
                         XCTAssertEqual(head.uri, requestPath)
                         XCTAssertEqual(head.method, .GET)
+                        if let expectedInterceptedHeader {
+                            XCTAssertEqual(head.headers.first(name: "x-intercepted"), expectedInterceptedHeader)
+                        }
                     case .body: XCTFail("Didn't expect any request body bytes.")
                     case .end:
                         try await outbound.write(.head(.init(version: .http1_1, status: .ok)))
@@ -259,7 +326,7 @@ func testHTTPBasicGet(transport: any ClientTransport) async throws {
     }
 }
 
-func testHTTPBasicPost(transport: any ClientTransport) async throws {
+func testHTTPBasicPost(transport: any ClientTransport, expectedInterceptedHeader: String? = nil) async throws {
     let requestPath = "/hello/world"
     let requestBodyMessage = "Hello, world!"
     let responseBodyMessage = "Hey!"
@@ -274,6 +341,9 @@ func testHTTPBasicPost(transport: any ClientTransport) async throws {
                     case .head(let head):
                         XCTAssertEqual(head.uri, requestPath)
                         XCTAssertEqual(head.method, .POST)
+                        if let expectedInterceptedHeader {
+                            XCTAssertEqual(head.headers.first(name: "x-intercepted"), expectedInterceptedHeader)
+                        }
                     case .body(let buffer): accumulatedBody.writeImmutableBuffer(buffer)
                     case .end:
                         XCTAssertEqual(accumulatedBody, ByteBuffer(string: requestBodyMessage))
@@ -305,6 +375,20 @@ func testHTTPBasicPost(transport: any ClientTransport) async throws {
 #endif
 
 class URLSessionTransportPlatformSupportTests: XCTestCase {
+    func testRequestInterceptorDefaultsToNil() {
+        XCTAssertNil(URLSessionTransport.Configuration().interceptRequest)
+        XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).interceptRequest)
+    }
+
+    func testRequestInterceptorInitializer() throws {
+        let configuration = URLSessionTransport.Configuration(interceptRequest: { request in
+            request.setValue("yes", forHTTPHeaderField: "x-intercepted")
+        })
+        var request = URLRequest(url: URL(string: "http://example.com")!)
+        try XCTUnwrap(configuration.interceptRequest)(&request)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-intercepted"), "yes")
+    }
+
     func testDefaultsToStreamingIfSupported() {
         if URLSessionTransport.Configuration.Implementation.platformSupportsStreaming {
             guard case .streaming = URLSessionTransport.Configuration.Implementation.platformDefault else {
