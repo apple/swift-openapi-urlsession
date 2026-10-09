@@ -73,10 +73,15 @@ public struct URLSessionTransport: ClientTransport {
         /// Throwing prevents the task from being created. Defaults to `nil`.
         /// The closure is not invoked again for redirects handled by URLSession.
         ///
-        /// For example, to add a request header:
+        /// For example, to configure a Foundation-specific request property for a server
+        /// known to support HTTP/3:
         ///
         ///     let configuration = URLSessionTransport.Configuration(interceptRequest: { request in
-        ///         request.setValue("custom-value", forHTTPHeaderField: "X-Custom-Header")
+        ///         #if canImport(Darwin)
+        ///         if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+        ///             request.assumesHTTP3Capable = true
+        ///         }
+        ///         #endif
         ///     })
         public var interceptRequest: (@Sendable (inout URLRequest) throws -> Void)?
 
