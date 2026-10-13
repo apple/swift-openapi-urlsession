@@ -380,6 +380,12 @@ class URLSessionTransportPlatformSupportTests: XCTestCase {
         XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).interceptRequest)
     }
 
+    func testExistingInitializerReference() {
+        let makeConfiguration = URLSessionTransport.Configuration.init(session:httpBodyProcessingMode:)
+        let configuration = makeConfiguration(.shared, .buffered)
+        XCTAssertNil(configuration.interceptRequest)
+    }
+
     func testRequestInterceptorInitializer() throws {
         let configuration = URLSessionTransport.Configuration(interceptRequest: { request in
             request.setValue("yes", forHTTPHeaderField: "x-intercepted")
