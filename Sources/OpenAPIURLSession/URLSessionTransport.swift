@@ -66,7 +66,7 @@ public struct URLSessionTransport: ClientTransport {
         /// The URLSession used for performing HTTP operations.
         public var session: URLSession
 
-        /// An optional closure that modifies a request immediately before its task is created.
+        /// An optional closure that enables modification of a request immediately before its task is created.
         ///
         /// The closure runs for both buffered and streaming requests. In streaming mode, the
         /// request body is provided separately and is not available through `httpBody`.
@@ -90,11 +90,21 @@ public struct URLSessionTransport: ClientTransport {
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        ///   - interceptRequest: An optional closure that modifies each request before its task is created.
+        public init(session: URLSession = .shared, httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault) {
+            let implementation = httpBodyProcessingMode.implementation
+            self.init(session: session, implementation: implementation)
+        }
+
+        /// Creates a new configuration with the provided session and request interceptor.
+        /// - Parameters:
+        ///   - session: The URLSession used for performing HTTP operations.
+        ///     If none is provided, the system uses the shared URLSession.
+        ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
+        ///   - interceptRequest: A closure that enables modification of each request before its task is created.
         public init(
             session: URLSession = .shared,
             httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
-            interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+            interceptRequest: @escaping @Sendable (inout URLRequest) throws -> Void
         ) {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation, interceptRequest: interceptRequest)
