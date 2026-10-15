@@ -94,9 +94,13 @@ class URLSessionTransportBufferedTests: XCTestCase {
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
 
-    func testRequestOptionsGet() async throws { try await testRequestOptions(transport: transport, withBody: false) }
+    func testRequestOverridesGet() async throws {
+        try await testRequestOverrides(transport: transport, withBody: false)
+    }
 
-    func testRequestOptionsPost() async throws { try await testRequestOptions(transport: transport, withBody: true) }
+    func testRequestOverridesPost() async throws {
+        try await testRequestOverrides(transport: transport, withBody: true)
+    }
 
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
@@ -139,9 +143,13 @@ class URLSessionTransportStreamingTests: XCTestCase {
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
 
-    func testRequestOptionsGet() async throws { try await testRequestOptions(transport: transport, withBody: false) }
+    func testRequestOverridesGet() async throws {
+        try await testRequestOverrides(transport: transport, withBody: false)
+    }
 
-    func testRequestOptionsPost() async throws { try await testRequestOptions(transport: transport, withBody: true) }
+    func testRequestOverridesPost() async throws {
+        try await testRequestOverrides(transport: transport, withBody: true)
+    }
 
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
@@ -244,11 +252,11 @@ func testHTTPRedirect(
     }
 }
 
-private func testRequestOptions(transport: URLSessionTransport, withBody: Bool) async throws {
+private func testRequestOverrides(transport: URLSessionTransport, withBody: Bool) async throws {
     var transport = transport
-    let called = XCTestExpectation(description: "Request options evaluated for the operation")
+    let called = XCTestExpectation(description: "Request overrides evaluated for the operation")
     called.assertForOverFulfill = true
-    transport.configuration.requestOptions = { operationID in
+    transport.configuration.requestOverrides = { operationID in
         XCTAssertEqual(operationID, "unused")
         called.fulfill()
         var overrides = URLSessionTransport.URLRequestOverrides()
@@ -351,27 +359,27 @@ func testHTTPBasicPost(transport: any ClientTransport) async throws {
 #endif
 
 class URLSessionTransportPlatformSupportTests: XCTestCase {
-    func testRequestOptionsDefaults() {
-        XCTAssertNil(URLSessionTransport.Configuration().requestOptions)
-        XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).requestOptions)
+    func testRequestOverridesDefaults() {
+        XCTAssertNil(URLSessionTransport.Configuration().requestOverrides)
+        XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).requestOverrides)
         XCTAssertNil(URLSessionTransport.URLRequestOverrides().assumesHTTP3Capable)
     }
 
     func testExistingInitializerReference() {
         let makeConfiguration = URLSessionTransport.Configuration.init(session:httpBodyProcessingMode:)
         let configuration = makeConfiguration(.shared, .buffered)
-        XCTAssertNil(configuration.requestOptions)
+        XCTAssertNil(configuration.requestOverrides)
     }
 
-    func testRequestOptionsInitializer() throws {
-        let configuration = URLSessionTransport.Configuration(requestOptions: { operationID in
+    func testRequestOverridesInitializer() throws {
+        let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
             var overrides = URLSessionTransport.URLRequestOverrides()
             overrides.assumesHTTP3Capable = operationID == "getGreeting" ? true : nil
             return overrides
         })
-        let requestOptions = try XCTUnwrap(configuration.requestOptions)
-        XCTAssertEqual(requestOptions("getGreeting").assumesHTTP3Capable, true)
-        XCTAssertNil(requestOptions("postGreeting").assumesHTTP3Capable)
+        let requestOverrides = try XCTUnwrap(configuration.requestOverrides)
+        XCTAssertEqual(requestOverrides("getGreeting").assumesHTTP3Capable, true)
+        XCTAssertNil(requestOverrides("postGreeting").assumesHTTP3Capable)
     }
 
     func testDefaultsToStreamingIfSupported() {
