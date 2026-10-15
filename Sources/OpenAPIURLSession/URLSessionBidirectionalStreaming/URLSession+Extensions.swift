@@ -23,11 +23,9 @@ import Foundation
         requestBody: HTTPBody?,
         requestStreamBufferSize: Int,
         responseStreamWatermarks: (low: Int, high: Int),
-        interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+        requestOverrides: URLSessionTransport.URLRequestOverrides? = nil
     ) async throws -> (HTTPResponse, HTTPBody?) {
-        var urlRequest = try URLRequest(request, baseURL: baseURL)
-        try interceptRequest?(&urlRequest)
-        try Task.checkCancellation()
+        let urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: requestOverrides)
         let task: URLSessionTask
         if requestBody != nil {
             task = uploadTask(withStreamedRequest: urlRequest)

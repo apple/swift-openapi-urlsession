@@ -60,30 +60,38 @@ import class FoundationNetworking.HTTPURLResponse
 /// timeouts, authentication challenges, and more.
 public struct URLSessionTransport: ClientTransport {
 
+    /// Per-request overrides for Foundation-specific behavior.
+    ///
+    /// These options do not expose the request headers or body. Use `ClientMiddleware`
+    /// to customize transport-independent HTTP behavior.
+    public struct URLRequestOverrides: Sendable {
+
+        /// Whether the request should assume that the server supports HTTP/3.
+        ///
+        /// Set this to `true` only for a server known to support HTTP/3. This requests
+        /// an HTTP/3 connection attempt; it does not guarantee that HTTP/3 is used.
+        /// A value of `nil` leaves the default URLRequest behavior unchanged.
+        /// This override is applied on macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4,
+        /// and later, including Mac Catalyst and visionOS. It is ignored on other
+        /// platforms and earlier operating system versions.
+        public var assumesHTTP3Capable: Bool? = nil
+
+        /// Creates overrides that leave the default URLRequest behavior unchanged.
+        public init() {}
+    }
+
     /// A set of configuration values for the URLSession transport.
     public struct Configuration: Sendable {
 
         /// The URLSession used for performing HTTP operations.
         public var session: URLSession
 
-        /// An optional closure that enables modification of a request immediately before its task is created.
+        /// A closure that provides request overrides for an OpenAPI operation identifier.
         ///
-        /// The closure runs for both buffered and streaming requests. In streaming mode, the
-        /// request body is provided separately and is not available through `httpBody`.
-        /// Throwing prevents the task from being created. Defaults to `nil`.
-        /// The closure is not invoked again for redirects handled by URLSession.
-        ///
-        /// For example, to configure a Foundation-specific request property for a server
-        /// known to support HTTP/3:
-        ///
-        ///     let configuration = URLSessionTransport.Configuration(interceptRequest: { request in
-        ///         #if canImport(Darwin)
-        ///         if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
-        ///             request.assumesHTTP3Capable = true
-        ///         }
-        ///         #endif
-        ///     })
-        public var interceptRequest: (@Sendable (inout URLRequest) throws -> Void)?
+        /// The closure is evaluated once per call to `send`, for both buffered and streaming
+        /// requests. It has no access to the request headers or body. When this property
+        /// is `nil`, the transport does not apply any overrides. Defaults to `nil`.
+        public var requestOptions: (@Sendable (_ operationID: String) -> URLRequestOverrides)?
 
         /// Creates a new configuration with the provided session.
         /// - Parameters:
@@ -94,21 +102,33 @@ public struct URLSessionTransport: ClientTransport {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation)
         }
-
-        /// Creates a new configuration with the provided session and request interceptor.
+        /// Creates a configuration with per-operation request overrides.
+        ///
+        /// For example, if the server used by `getGreeting` is known to support HTTP/3:
+        ///
+        ///     let configuration = URLSessionTransport.Configuration(requestOptions: { operationID in
+        ///         var overrides = URLSessionTransport.URLRequestOverrides()
+        ///         if operationID == "getGreeting" {
+        ///             overrides.assumesHTTP3Capable = true
+        ///         }
+        ///         return overrides
+        ///     })
+        ///
         /// - Parameters:
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        ///   - interceptRequest: A closure that enables modification of each request before its task is created.
+        ///   - requestOptions: A closure that provides request overrides for each operation identifier.
         public init(
             session: URLSession = .shared,
             httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
-            interceptRequest: @escaping @Sendable (inout URLRequest) throws -> Void
+            requestOptions: @escaping @Sendable (_ operationID: String) -> URLRequestOverrides
         ) {
             let implementation = httpBodyProcessingMode.implementation
-            self.init(session: session, implementation: implementation, interceptRequest: interceptRequest)
+            self.init(session: session, implementation: implementation)
+            self.requestOptions = requestOptions
         }
+
         /// Creates a new configuration with the provided session.
         /// - Parameter session: The URLSession used for performing HTTP operations.
         ///   If none is provided, the system uses the shared URLSession.
@@ -134,13 +154,9 @@ public struct URLSessionTransport: ClientTransport {
 
         var implementation: Implementation
 
-        init(
-            session: URLSession = .shared,
-            implementation: Implementation,
-            interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
-        ) {
+        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
             self.session = session
-            self.interceptRequest = interceptRequest
+            self.requestOptions = nil
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
             }
@@ -166,6 +182,7 @@ public struct URLSessionTransport: ClientTransport {
     public func send(_ request: HTTPRequest, body requestBody: HTTPBody?, baseURL: URL, operationID: String)
         async throws -> (HTTPResponse, HTTPBody?)
     {
+        let requestOverrides = configuration.requestOptions?(operationID)
         switch configuration.implementation {
         case .streaming(let requestBodyStreamBufferSize, let responseBodyStreamWatermarks):
             #if canImport(Darwin)
@@ -178,7 +195,7 @@ public struct URLSessionTransport: ClientTransport {
                 requestBody: requestBody,
                 requestStreamBufferSize: requestBodyStreamBufferSize,
                 responseStreamWatermarks: responseBodyStreamWatermarks,
-                interceptRequest: configuration.interceptRequest
+                requestOverrides: requestOverrides
             )
             #else
             throw URLSessionTransportError.streamingNotSupported
@@ -188,7 +205,7 @@ public struct URLSessionTransport: ClientTransport {
                 for: request,
                 baseURL: baseURL,
                 requestBody: requestBody,
-                interceptRequest: configuration.interceptRequest
+                requestOverrides: requestOverrides
             )
         }
     }
@@ -244,7 +261,8 @@ extension HTTPResponse {
 }
 
 extension URLRequest {
-    init(_ request: HTTPRequest, baseURL: URL) throws {
+    init(_ request: HTTPRequest, baseURL: URL, requestOverrides: URLSessionTransport.URLRequestOverrides? = nil) throws
+    {
         guard var baseUrlComponents = URLComponents(string: baseURL.absoluteString),
             let requestUrlComponents = URLComponents(string: request.path ?? "")
         else {
@@ -275,6 +293,13 @@ extension URLRequest {
         var headerFields = [String: String](minimumCapacity: combinedFields.count)
         for (name, value) in combinedFields { headerFields[name.rawName] = value }
         self.allHTTPHeaderFields = headerFields
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *),
+            let assumesHTTP3Capable = requestOverrides?.assumesHTTP3Capable
+        {
+            self.assumesHTTP3Capable = assumesHTTP3Capable
+        }
+        #endif
     }
 }
 
@@ -358,12 +383,11 @@ extension URLSession {
         for request: HTTPRequest,
         baseURL: URL,
         requestBody: HTTPBody?,
-        interceptRequest: (@Sendable (inout URLRequest) throws -> Void)? = nil
+        requestOverrides: URLSessionTransport.URLRequestOverrides? = nil
     ) async throws -> (HTTPResponse, HTTPBody?) {
         try Task.checkCancellation()
-        var urlRequest = try URLRequest(request, baseURL: baseURL)
+        var urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: requestOverrides)
         if let requestBody { urlRequest.httpBody = try await Data(collecting: requestBody, upTo: .max) }
-        try interceptRequest?(&urlRequest)
         try Task.checkCancellation()
 
         /// Use `dataTask(with:completionHandler:)` here because `data(for:[delegate:]) async` is only available on
