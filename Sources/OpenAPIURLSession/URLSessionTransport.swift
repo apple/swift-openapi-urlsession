@@ -60,26 +60,6 @@ import class FoundationNetworking.HTTPURLResponse
 /// timeouts, authentication challenges, and more.
 public struct URLSessionTransport: ClientTransport {
 
-    /// Per-request overrides for Foundation-specific behavior.
-    ///
-    /// These options do not expose the request headers or body. Use `ClientMiddleware`
-    /// to customize transport-independent HTTP behavior.
-    public struct URLRequestOverrides: Sendable {
-
-        /// Whether the request should assume that the server supports HTTP/3.
-        ///
-        /// Set this to `true` only for a server known to support HTTP/3. This requests
-        /// an HTTP/3 connection attempt; it does not guarantee that HTTP/3 is used.
-        /// A value of `nil` leaves the default URLRequest behavior unchanged.
-        /// This override is applied on macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4,
-        /// and later, including Mac Catalyst and visionOS. It is ignored on other
-        /// platforms and earlier operating system versions.
-        public var assumesHTTP3Capable: Bool? = nil
-
-        /// Creates overrides that leave the default URLRequest behavior unchanged.
-        public init() {}
-    }
-
     /// A set of configuration values for the URLSession transport.
     public struct Configuration: Sendable {
 
@@ -88,10 +68,11 @@ public struct URLSessionTransport: ClientTransport {
 
         /// A closure that provides request overrides for an OpenAPI operation identifier.
         ///
-        /// The closure is evaluated once per call to `send`, for both buffered and streaming
-        /// requests. It has no access to the request headers or body. When this property
-        /// is `nil`, the transport does not apply any overrides. Defaults to `nil`.
-        public var requestOptions: (@Sendable (_ operationID: String) -> URLRequestOverrides)?
+        /// The closure receives the operation's `operationId` from the OpenAPI document
+        /// and returns the overrides to apply to its request.
+        /// It is evaluated once per call to `send`, for both buffered and streaming requests.
+        /// When this property is `nil`, the transport does not apply any overrides. Defaults to `nil`.
+        public var requestOverrides: (@Sendable (_ operationID: String) -> URLRequestOverrides)?
 
         /// Creates a new configuration with the provided session.
         /// - Parameters:
@@ -102,11 +83,16 @@ public struct URLSessionTransport: ClientTransport {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation)
         }
+        /// Creates a new configuration with the provided session.
+        /// - Parameter session: The URLSession used for performing HTTP operations.
+        ///   If none is provided, the system uses the shared URLSession.
+        public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
+
         /// Creates a configuration with per-operation request overrides.
         ///
         /// For example, if the server used by `getGreeting` is known to support HTTP/3:
         ///
-        ///     let configuration = URLSessionTransport.Configuration(requestOptions: { operationID in
+        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
         ///         var overrides = URLSessionTransport.URLRequestOverrides()
         ///         if operationID == "getGreeting" {
         ///             overrides.assumesHTTP3Capable = true
@@ -118,21 +104,18 @@ public struct URLSessionTransport: ClientTransport {
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        ///   - requestOptions: A closure that provides request overrides for each operation identifier.
+        ///   - requestOverrides: A closure that receives the operation's `operationId` from the OpenAPI
+        ///     document and returns the overrides to apply to its request.
         public init(
             session: URLSession = .shared,
             httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
-            requestOptions: @escaping @Sendable (_ operationID: String) -> URLRequestOverrides
+            requestOverrides: @escaping @Sendable (_ operationID: String) -> URLRequestOverrides
         ) {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation)
-            self.requestOptions = requestOptions
+            self.requestOverrides = requestOverrides
         }
 
-        /// Creates a new configuration with the provided session.
-        /// - Parameter session: The URLSession used for performing HTTP operations.
-        ///   If none is provided, the system uses the shared URLSession.
-        public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
         /// Specifies the mode in which HTTP request and response bodies are processed.
         public struct HTTPBodyProcessingMode: Sendable {
             /// Exposing the internal implementation directly.
@@ -156,12 +139,29 @@ public struct URLSessionTransport: ClientTransport {
 
         init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
             self.session = session
-            self.requestOptions = nil
+            self.requestOverrides = nil
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
             }
             self.implementation = implementation
         }
+    }
+
+    /// Per-request overrides for Foundation-specific behavior.
+    public struct URLRequestOverrides: Sendable {
+
+        /// Whether the request should assume that the server supports HTTP/3.
+        ///
+        /// Set this to `true` only for a server known to support HTTP/3. This requests
+        /// an HTTP/3 connection attempt; it does not guarantee that HTTP/3 is used.
+        /// A value of `nil` leaves the default URLRequest behavior unchanged.
+        /// This override is applied on macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4,
+        /// and later, including Mac Catalyst and visionOS. It is ignored on other
+        /// platforms and earlier operating system versions.
+        public var assumesHTTP3Capable: Bool? = nil
+
+        /// Creates overrides that leave the default URLRequest behavior unchanged.
+        public init() {}
     }
 
     /// A set of configuration values used by the transport.
@@ -182,7 +182,7 @@ public struct URLSessionTransport: ClientTransport {
     public func send(_ request: HTTPRequest, body requestBody: HTTPBody?, baseURL: URL, operationID: String)
         async throws -> (HTTPResponse, HTTPBody?)
     {
-        let requestOverrides = configuration.requestOptions?(operationID)
+        let requestOverrides = configuration.requestOverrides?(operationID)
         switch configuration.implementation {
         case .streaming(let requestBodyStreamBufferSize, let responseBodyStreamWatermarks):
             #if canImport(Darwin)
