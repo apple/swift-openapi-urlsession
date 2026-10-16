@@ -72,7 +72,7 @@ public struct URLSessionTransport: ClientTransport {
         /// and returns the overrides to apply to its request.
         /// It is evaluated once per call to `send`, for both buffered and streaming requests.
         /// When this property is `nil`, the transport does not apply any overrides. Defaults to `nil`.
-        public var requestOverrides: (@Sendable (_ operationID: String) -> URLRequestOverrides)?
+        public var requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)?
 
         /// Creates a new configuration with the provided session.
         /// - Parameters:
@@ -90,16 +90,6 @@ public struct URLSessionTransport: ClientTransport {
 
         /// Creates a configuration with per-operation request overrides.
         ///
-        /// For example, if the server used by `getGreeting` is known to support HTTP/3:
-        ///
-        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
-        ///         var overrides = URLSessionTransport.URLRequestOverrides()
-        ///         if operationID == "getGreeting" {
-        ///             overrides.assumesHTTP3Capable = true
-        ///         }
-        ///         return overrides
-        ///     })
-        ///
         /// - Parameters:
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
@@ -109,11 +99,32 @@ public struct URLSessionTransport: ClientTransport {
         public init(
             session: URLSession = .shared,
             httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
-            requestOverrides: @escaping @Sendable (_ operationID: String) -> URLRequestOverrides
+            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
         ) {
             let implementation = httpBodyProcessingMode.implementation
-            self.init(session: session, implementation: implementation)
-            self.requestOverrides = requestOverrides
+            self.init(session: session, implementation: implementation, requestOverrides: requestOverrides)
+        }
+
+        /// Per-request overrides for Foundation-specific behavior.
+        ///
+        /// For example, if the server used by `getGreeting` is known to support HTTP/3:
+        ///
+        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
+        ///         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+        ///         if operationID == "getGreeting" {
+        ///             overrides.assumesHTTP3Capable = true
+        ///         }
+        ///         return overrides
+        ///     })
+        ///
+        public struct RequestOverrides: Sendable {
+
+            /// Whether the request should assume that the server supports HTTP/3, if supported by the platform.
+            /// A value of `nil` leaves the default URLRequest behavior unchanged.
+            public var assumesHTTP3Capable: Bool? = nil
+
+            /// Overrides that leave the default URLRequest behavior unchanged.
+            public static var empty: Self { .init() }
         }
 
         /// Specifies the mode in which HTTP request and response bodies are processed.
@@ -137,31 +148,18 @@ public struct URLSessionTransport: ClientTransport {
 
         var implementation: Implementation
 
-        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+        init(
+            session: URLSession = .shared,
+            implementation: Implementation,
+            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
+        ) {
             self.session = session
-            self.requestOverrides = nil
+            self.requestOverrides = requestOverrides
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
             }
             self.implementation = implementation
         }
-    }
-
-    /// Per-request overrides for Foundation-specific behavior.
-    public struct URLRequestOverrides: Sendable {
-
-        /// Whether the request should assume that the server supports HTTP/3.
-        ///
-        /// Set this to `true` only for a server known to support HTTP/3. This requests
-        /// an HTTP/3 connection attempt; it does not guarantee that HTTP/3 is used.
-        /// A value of `nil` leaves the default URLRequest behavior unchanged.
-        /// This override is applied on macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4,
-        /// and later, including Mac Catalyst and visionOS. It is ignored on other
-        /// platforms and earlier operating system versions.
-        public var assumesHTTP3Capable: Bool? = nil
-
-        /// Creates overrides that leave the default URLRequest behavior unchanged.
-        public init() {}
     }
 
     /// A set of configuration values used by the transport.
@@ -261,8 +259,11 @@ extension HTTPResponse {
 }
 
 extension URLRequest {
-    init(_ request: HTTPRequest, baseURL: URL, requestOverrides: URLSessionTransport.URLRequestOverrides? = nil) throws
-    {
+    init(
+        _ request: HTTPRequest,
+        baseURL: URL,
+        requestOverrides: URLSessionTransport.Configuration.RequestOverrides? = nil
+    ) throws {
         guard var baseUrlComponents = URLComponents(string: baseURL.absoluteString),
             let requestUrlComponents = URLComponents(string: request.path ?? "")
         else {
@@ -383,7 +384,7 @@ extension URLSession {
         for request: HTTPRequest,
         baseURL: URL,
         requestBody: HTTPBody?,
-        requestOverrides: URLSessionTransport.URLRequestOverrides? = nil
+        requestOverrides: URLSessionTransport.Configuration.RequestOverrides? = nil
     ) async throws -> (HTTPResponse, HTTPBody?) {
         try Task.checkCancellation()
         var urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: requestOverrides)

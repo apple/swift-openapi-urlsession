@@ -52,7 +52,7 @@ class URLSessionTransportConverterTests: XCTestCase {
         let request = HTTPRequest(method: .get, scheme: nil, authority: nil, path: "/hello")
         let baseURL = URL(string: "https://example.com")!
         let defaultRequest = try URLRequest(request, baseURL: baseURL)
-        var overrides = URLSessionTransport.URLRequestOverrides()
+        var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
         for value: Bool? in [nil, true, false] {
             overrides.assumesHTTP3Capable = value
             let urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: overrides)
@@ -259,7 +259,7 @@ private func testRequestOverrides(transport: URLSessionTransport, withBody: Bool
     transport.configuration.requestOverrides = { operationID in
         XCTAssertEqual(operationID, "unused")
         called.fulfill()
-        var overrides = URLSessionTransport.URLRequestOverrides()
+        var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
         overrides.assumesHTTP3Capable = true
         return overrides
     }
@@ -362,18 +362,44 @@ class URLSessionTransportPlatformSupportTests: XCTestCase {
     func testRequestOverridesDefaults() {
         XCTAssertNil(URLSessionTransport.Configuration().requestOverrides)
         XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).requestOverrides)
-        XCTAssertNil(URLSessionTransport.URLRequestOverrides().assumesHTTP3Capable)
+        XCTAssertNil(URLSessionTransport.Configuration.RequestOverrides.empty.assumesHTTP3Capable)
     }
 
     func testExistingInitializerReference() {
         let makeConfiguration = URLSessionTransport.Configuration.init(session:httpBodyProcessingMode:)
         let configuration = makeConfiguration(.shared, .buffered)
         XCTAssertNil(configuration.requestOverrides)
+        let makeSessionConfiguration = URLSessionTransport.Configuration.init(session:)
+        XCTAssertNil(makeSessionConfiguration(.shared).requestOverrides)
+    }
+
+    func testOptionalRequestOverridesInitializer() throws {
+        let requestOverrides: (@Sendable (String) -> URLSessionTransport.Configuration.RequestOverrides)? = nil
+        let configuration = URLSessionTransport.Configuration(requestOverrides: requestOverrides)
+        XCTAssertNil(configuration.requestOverrides)
+        XCTAssertNil(URLSessionTransport.Configuration(session: .shared, requestOverrides: nil).requestOverrides)
+        XCTAssertNil(
+            URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered, requestOverrides: nil).requestOverrides
+        )
+        let configuredOverrides: (@Sendable (String) -> URLSessionTransport.Configuration.RequestOverrides)? = { _ in
+            var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+            overrides.assumesHTTP3Capable = false
+            return overrides
+        }
+        let session = URLSession(configuration: .ephemeral)
+        let configured = URLSessionTransport.Configuration(
+            session: session,
+            httpBodyProcessingMode: .buffered,
+            requestOverrides: configuredOverrides
+        )
+        XCTAssertTrue(configured.session === session)
+        guard case .buffering = configured.implementation else { return XCTFail("Expected buffering") }
+        XCTAssertEqual(try XCTUnwrap(configured.requestOverrides)("getGreeting").assumesHTTP3Capable, false)
     }
 
     func testRequestOverridesInitializer() throws {
         let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
-            var overrides = URLSessionTransport.URLRequestOverrides()
+            var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
             overrides.assumesHTTP3Capable = operationID == "getGreeting" ? true : nil
             return overrides
         })
