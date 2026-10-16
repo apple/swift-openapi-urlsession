@@ -66,6 +66,14 @@ public struct URLSessionTransport: ClientTransport {
         /// The URLSession used for performing HTTP operations.
         public var session: URLSession
 
+        /// A closure that provides request overrides for an OpenAPI operation identifier.
+        ///
+        /// The closure receives the operation's `operationId` from the OpenAPI document
+        /// and returns the overrides to apply to its request.
+        /// It is evaluated once per call to `send`, for both buffered and streaming requests.
+        /// When this property is `nil`, the transport does not apply any overrides. Defaults to `nil`.
+        public var requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)?
+
         /// Creates a new configuration with the provided session.
         /// - Parameters:
         ///   - session: The URLSession used for performing HTTP operations.
@@ -79,6 +87,46 @@ public struct URLSessionTransport: ClientTransport {
         /// - Parameter session: The URLSession used for performing HTTP operations.
         ///   If none is provided, the system uses the shared URLSession.
         public init(session: URLSession = .shared) { self.init(session: session, implementation: .platformDefault) }
+
+        /// Creates a configuration with per-operation request overrides.
+        ///
+        /// - Parameters:
+        ///   - session: The URLSession used for performing HTTP operations.
+        ///     If none is provided, the system uses the shared URLSession.
+        ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
+        ///   - requestOverrides: A closure that receives the operation's `operationId` from the OpenAPI
+        ///     document and returns the overrides to apply to its request.
+        public init(
+            session: URLSession = .shared,
+            httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
+            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
+        ) {
+            let implementation = httpBodyProcessingMode.implementation
+            self.init(session: session, implementation: implementation, requestOverrides: requestOverrides)
+        }
+
+        /// Per-request overrides for Foundation-specific behavior.
+        ///
+        /// For example, if the server used by `getGreeting` is known to support HTTP/3:
+        ///
+        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
+        ///         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+        ///         if operationID == "getGreeting" {
+        ///             overrides.assumesHTTP3Capable = true
+        ///         }
+        ///         return overrides
+        ///     })
+        ///
+        public struct RequestOverrides: Sendable {
+
+            /// Whether the request should assume that the server supports HTTP/3, if supported by the platform.
+            /// A value of `nil` leaves the default URLRequest behavior unchanged.
+            public var assumesHTTP3Capable: Bool? = nil
+
+            /// Overrides that leave the default URLRequest behavior unchanged.
+            public static var empty: Self { .init() }
+        }
+
         /// Specifies the mode in which HTTP request and response bodies are processed.
         public struct HTTPBodyProcessingMode: Sendable {
             /// Exposing the internal implementation directly.
@@ -100,8 +148,13 @@ public struct URLSessionTransport: ClientTransport {
 
         var implementation: Implementation
 
-        init(session: URLSession = .shared, implementation: Implementation = .platformDefault) {
+        init(
+            session: URLSession = .shared,
+            implementation: Implementation,
+            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
+        ) {
             self.session = session
+            self.requestOverrides = requestOverrides
             if case .streaming = implementation {
                 precondition(Implementation.platformSupportsStreaming, "Streaming not supported on platform")
             }
@@ -127,6 +180,7 @@ public struct URLSessionTransport: ClientTransport {
     public func send(_ request: HTTPRequest, body requestBody: HTTPBody?, baseURL: URL, operationID: String)
         async throws -> (HTTPResponse, HTTPBody?)
     {
+        let requestOverrides = configuration.requestOverrides?(operationID)
         switch configuration.implementation {
         case .streaming(let requestBodyStreamBufferSize, let responseBodyStreamWatermarks):
             #if canImport(Darwin)
@@ -138,7 +192,8 @@ public struct URLSessionTransport: ClientTransport {
                 baseURL: baseURL,
                 requestBody: requestBody,
                 requestStreamBufferSize: requestBodyStreamBufferSize,
-                responseStreamWatermarks: responseBodyStreamWatermarks
+                responseStreamWatermarks: responseBodyStreamWatermarks,
+                requestOverrides: requestOverrides
             )
             #else
             throw URLSessionTransportError.streamingNotSupported
@@ -147,7 +202,8 @@ public struct URLSessionTransport: ClientTransport {
             return try await configuration.session.bufferedRequest(
                 for: request,
                 baseURL: baseURL,
-                requestBody: requestBody
+                requestBody: requestBody,
+                requestOverrides: requestOverrides
             )
         }
     }
@@ -203,7 +259,11 @@ extension HTTPResponse {
 }
 
 extension URLRequest {
-    init(_ request: HTTPRequest, baseURL: URL) throws {
+    init(
+        _ request: HTTPRequest,
+        baseURL: URL,
+        requestOverrides: URLSessionTransport.Configuration.RequestOverrides? = nil
+    ) throws {
         guard var baseUrlComponents = URLComponents(string: baseURL.absoluteString),
             let requestUrlComponents = URLComponents(string: request.path ?? "")
         else {
@@ -234,6 +294,13 @@ extension URLRequest {
         var headerFields = [String: String](minimumCapacity: combinedFields.count)
         for (name, value) in combinedFields { headerFields[name.rawName] = value }
         self.allHTTPHeaderFields = headerFields
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *),
+            let assumesHTTP3Capable = requestOverrides?.assumesHTTP3Capable
+        {
+            self.assumesHTTP3Capable = assumesHTTP3Capable
+        }
+        #endif
     }
 }
 
@@ -313,11 +380,14 @@ func debug(_ message: @autoclosure () -> String, function: String = #function, f
 }
 
 extension URLSession {
-    func bufferedRequest(for request: HTTPRequest, baseURL: URL, requestBody: HTTPBody?) async throws -> (
-        HTTPResponse, HTTPBody?
-    ) {
+    func bufferedRequest(
+        for request: HTTPRequest,
+        baseURL: URL,
+        requestBody: HTTPBody?,
+        requestOverrides: URLSessionTransport.Configuration.RequestOverrides? = nil
+    ) async throws -> (HTTPResponse, HTTPBody?) {
         try Task.checkCancellation()
-        var urlRequest = try URLRequest(request, baseURL: baseURL)
+        var urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: requestOverrides)
         if let requestBody { urlRequest.httpBody = try await Data(collecting: requestBody, upTo: .max) }
         try Task.checkCancellation()
 
