@@ -128,7 +128,6 @@ import DequeModule
 ///         print("Error: \(error)")
 ///     }
 ///
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 @usableFromInline
 internal struct BufferedStream<Element: Sendable> {
     @usableFromInline
@@ -156,7 +155,6 @@ internal struct BufferedStream<Element: Sendable> {
     let implementation: _Implementation
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream: AsyncSequence {
     /// The asynchronous iterator for iterating an asynchronous stream.
     ///
@@ -229,7 +227,6 @@ extension BufferedStream: AsyncSequence {
     }
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream: Sendable where Element: Sendable {}
 
 @usableFromInline
@@ -256,7 +253,6 @@ internal struct AlreadyFinishedError: Error {
     init() {}
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream {
     /// A mechanism to interface between producer code and an asynchronous stream.
     ///
@@ -586,7 +582,6 @@ extension BufferedStream {
     }
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream {
     @usableFromInline
     struct _WatermarkBackPressureStrategy: Sendable {
@@ -691,7 +686,6 @@ extension BufferedStream {
     }
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream {
     // We are unchecked Sendable since we are protecting our state with a lock.
     @usableFromInline
@@ -1007,7 +1001,6 @@ extension BufferedStream {
     }
 }
 
-@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension BufferedStream {
     /// The state machine of the backpressured async stream.
     @usableFromInline
