@@ -23,7 +23,7 @@ import Foundation
         requestBody: HTTPBody?,
         requestStreamBufferSize: Int,
         responseStreamWatermarks: (low: Int, high: Int),
-        requestOverrides: URLSessionTransport.URLRequestOverrides? = nil
+        requestOverrides: URLSessionTransport.Configuration.RequestOverrides? = nil
     ) async throws -> (HTTPResponse, HTTPBody?) {
         let urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: requestOverrides)
         let task: URLSessionTask
