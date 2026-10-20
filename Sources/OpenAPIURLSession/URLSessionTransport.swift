@@ -117,17 +117,32 @@ public struct URLSessionTransport: ClientTransport {
         ///
         ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { metadata in
         ///         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
-        ///         if metadata.operationID == "getGreeting" {
-        ///             overrides.assumesHTTP3Capable = true
+        ///         #if canImport(Darwin)
+        ///         if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+        ///             if metadata.operationID == "getGreeting" {
+        ///                 overrides.assumesHTTP3Capable = true
+        ///             }
         ///         }
+        ///         #endif
         ///         return overrides
         ///     })
         ///
         public struct RequestOverrides: Sendable {
 
-            /// Whether the request should assume that the server supports HTTP/3, if supported by the platform.
+            private var _assumesHTTP3Capable: Bool? = nil
+
+            /// Whether the request should assume that the server supports HTTP/3.
             /// A value of `nil` leaves the default URLRequest behavior unchanged.
-            public var assumesHTTP3Capable: Bool? = nil
+            #if canImport(Darwin)
+            @available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *)
+            #else
+            @available(*, unavailable, message: "This option is not supported on this platform")
+            #endif
+
+            public var assumesHTTP3Capable: Bool? {
+                get { _assumesHTTP3Capable }
+                set { _assumesHTTP3Capable = newValue }
+            }
 
             /// Overrides that leave the default URLRequest behavior unchanged.
             public static var empty: Self { .init() }

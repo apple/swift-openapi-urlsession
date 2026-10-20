@@ -54,7 +54,9 @@ class URLSessionTransportConverterTests: XCTestCase {
         let defaultRequest = try URLRequest(request, baseURL: baseURL)
         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
         for value: Bool? in [nil, true, false] {
-            overrides.assumesHTTP3Capable = value
+            #if canImport(Darwin)
+            if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = value }
+            #endif
             let urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: overrides)
             XCTAssertEqual(urlRequest.url, defaultRequest.url)
             XCTAssertEqual(urlRequest.httpMethod, defaultRequest.httpMethod)
@@ -260,7 +262,9 @@ private func testRequestOverrides(transport: URLSessionTransport, withBody: Bool
         XCTAssertEqual(metadata.operationID, "unused")
         called.fulfill()
         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
-        overrides.assumesHTTP3Capable = true
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = true }
+        #endif
         return overrides
     }
     if withBody {
@@ -362,7 +366,11 @@ class URLSessionTransportPlatformSupportTests: XCTestCase {
     func testRequestOverridesDefaults() {
         XCTAssertNil(URLSessionTransport.Configuration().requestOverrides)
         XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).requestOverrides)
-        XCTAssertNil(URLSessionTransport.Configuration.RequestOverrides.empty.assumesHTTP3Capable)
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertNil(URLSessionTransport.Configuration.RequestOverrides.empty.assumesHTTP3Capable)
+        }
+        #endif
     }
 
     func testExistingInitializerReference() {
@@ -391,7 +399,9 @@ class URLSessionTransportPlatformSupportTests: XCTestCase {
                     URLSessionTransport.Configuration.RequestOverrides
             )? = { _ in
                 var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
-                overrides.assumesHTTP3Capable = false
+                #if canImport(Darwin)
+                if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = false }
+                #endif
                 return overrides
             }
         let session = URLSession(configuration: .ephemeral)
@@ -402,21 +412,33 @@ class URLSessionTransportPlatformSupportTests: XCTestCase {
         )
         XCTAssertTrue(configured.session === session)
         guard case .buffering = configured.implementation else { return XCTFail("Expected buffering") }
-        XCTAssertEqual(
-            try XCTUnwrap(configured.requestOverrides)(.init(operationID: "getGreeting")).assumesHTTP3Capable,
-            false
-        )
+        let overrides = try XCTUnwrap(configured.requestOverrides)(.init(operationID: "getGreeting"))
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertEqual(overrides.assumesHTTP3Capable, false)
+        }
+        #endif
     }
 
     func testRequestOverridesInitializer() throws {
         let configuration = URLSessionTransport.Configuration(requestOverrides: { metadata in
             var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
-            overrides.assumesHTTP3Capable = metadata.operationID == "getGreeting" ? true : nil
+            #if canImport(Darwin)
+            if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+                overrides.assumesHTTP3Capable = metadata.operationID == "getGreeting" ? true : nil
+            }
+            #endif
             return overrides
         })
         let requestOverrides = try XCTUnwrap(configuration.requestOverrides)
-        XCTAssertEqual(requestOverrides(.init(operationID: "getGreeting")).assumesHTTP3Capable, true)
-        XCTAssertNil(requestOverrides(.init(operationID: "postGreeting")).assumesHTTP3Capable)
+        let getOverrides = requestOverrides(.init(operationID: "getGreeting"))
+        let postOverrides = requestOverrides(.init(operationID: "postGreeting"))
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertEqual(getOverrides.assumesHTTP3Capable, true)
+            XCTAssertNil(postOverrides.assumesHTTP3Capable)
+        }
+        #endif
     }
 
     func testDefaultsToStreamingIfSupported() {
