@@ -66,13 +66,12 @@ public struct URLSessionTransport: ClientTransport {
         /// The URLSession used for performing HTTP operations.
         public var session: URLSession
 
-        /// A closure that provides request overrides for an OpenAPI operation identifier.
+        /// A closure that provides request overrides using metadata about an OpenAPI operation.
         ///
-        /// The closure receives the operation's `operationId` from the OpenAPI document
-        /// and returns the overrides to apply to its request.
+        /// The closure receives metadata about the operation and returns the overrides to apply to its request.
         /// It is evaluated once per call to `send`, for both buffered and streaming requests.
         /// When this property is `nil`, the transport does not apply any overrides. Defaults to `nil`.
-        public var requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)?
+        public var requestOverrides: (@Sendable (_ metadata: RequestMetadata) -> RequestOverrides)?
 
         /// Creates a new configuration with the provided session.
         /// - Parameters:
@@ -94,24 +93,31 @@ public struct URLSessionTransport: ClientTransport {
         ///   - session: The URLSession used for performing HTTP operations.
         ///     If none is provided, the system uses the shared URLSession.
         ///   - httpBodyProcessingMode: The mode used to process HTTP request and response bodies.
-        ///   - requestOverrides: A closure that receives the operation's `operationId` from the OpenAPI
-        ///     document and returns the overrides to apply to its request.
+        ///   - requestOverrides: A closure that receives metadata about the operation
+        ///     and returns the overrides to apply to its request.
         public init(
             session: URLSession = .shared,
             httpBodyProcessingMode: HTTPBodyProcessingMode = .platformDefault,
-            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
+            requestOverrides: (@Sendable (_ metadata: RequestMetadata) -> RequestOverrides)? = nil
         ) {
             let implementation = httpBodyProcessingMode.implementation
             self.init(session: session, implementation: implementation, requestOverrides: requestOverrides)
+        }
+
+        /// Metadata about an OpenAPI operation used to determine request overrides.
+        public struct RequestMetadata: Sendable {
+
+            /// The operation's `operationId` from the OpenAPI document.
+            public var operationID: String
         }
 
         /// Per-request overrides for Foundation-specific behavior.
         ///
         /// For example, if the server used by `getGreeting` is known to support HTTP/3:
         ///
-        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { operationID in
+        ///     let configuration = URLSessionTransport.Configuration(requestOverrides: { metadata in
         ///         var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
-        ///         if operationID == "getGreeting" {
+        ///         if metadata.operationID == "getGreeting" {
         ///             overrides.assumesHTTP3Capable = true
         ///         }
         ///         return overrides
@@ -151,7 +157,7 @@ public struct URLSessionTransport: ClientTransport {
         init(
             session: URLSession = .shared,
             implementation: Implementation,
-            requestOverrides: (@Sendable (_ operationID: String) -> RequestOverrides)? = nil
+            requestOverrides: (@Sendable (_ metadata: RequestMetadata) -> RequestOverrides)? = nil
         ) {
             self.session = session
             self.requestOverrides = requestOverrides
@@ -180,7 +186,7 @@ public struct URLSessionTransport: ClientTransport {
     public func send(_ request: HTTPRequest, body requestBody: HTTPBody?, baseURL: URL, operationID: String)
         async throws -> (HTTPResponse, HTTPBody?)
     {
-        let requestOverrides = configuration.requestOverrides?(operationID)
+        let requestOverrides = configuration.requestOverrides?(.init(operationID: operationID))
         switch configuration.implementation {
         case .streaming(let requestBodyStreamBufferSize, let responseBodyStreamWatermarks):
             #if canImport(Darwin)
