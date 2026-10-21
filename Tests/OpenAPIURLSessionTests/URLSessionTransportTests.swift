@@ -48,6 +48,26 @@ class URLSessionTransportConverterTests: XCTestCase {
         XCTAssertEqual(urlRequest.value(forHTTPHeaderField: "X-Emoji"), "ð")
     }
 
+    func testRequestOverrides() throws {
+        let request = HTTPRequest(method: .get, scheme: nil, authority: nil, path: "/hello")
+        let baseURL = URL(string: "https://example.com")!
+        let defaultRequest = try URLRequest(request, baseURL: baseURL)
+        var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+        for value: Bool? in [nil, true, false] {
+            #if canImport(Darwin)
+            if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = value }
+            #endif
+            let urlRequest = try URLRequest(request, baseURL: baseURL, requestOverrides: overrides)
+            XCTAssertEqual(urlRequest.url, defaultRequest.url)
+            XCTAssertEqual(urlRequest.httpMethod, defaultRequest.httpMethod)
+            #if canImport(Darwin)
+            if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+                XCTAssertEqual(urlRequest.assumesHTTP3Capable, value ?? defaultRequest.assumesHTTP3Capable)
+            }
+            #endif
+        }
+    }
+
     func testResponseConversion() async throws {
         let urlResponse: URLResponse = HTTPURLResponse(
             url: URL(string: "http://example.com/api/hello%20world/Maria?greeting=Howdy")!,
@@ -75,6 +95,14 @@ class URLSessionTransportBufferedTests: XCTestCase {
     func testBasicGet() async throws { try await testHTTPBasicGet(transport: transport) }
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
+
+    func testRequestOverridesGet() async throws {
+        try await testRequestOverrides(transport: transport, withBody: false)
+    }
+
+    func testRequestOverridesPost() async throws {
+        try await testRequestOverrides(transport: transport, withBody: true)
+    }
 
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
@@ -116,6 +144,14 @@ class URLSessionTransportStreamingTests: XCTestCase {
     func testBasicGet() async throws { try await testHTTPBasicGet(transport: transport) }
 
     func testBasicPost() async throws { try await testHTTPBasicPost(transport: transport) }
+
+    func testRequestOverridesGet() async throws {
+        try await testRequestOverrides(transport: transport, withBody: false)
+    }
+
+    func testRequestOverridesPost() async throws {
+        try await testRequestOverrides(transport: transport, withBody: true)
+    }
 
     #if canImport(Darwin)  // Only passes on Darwin because Linux doesn't replay the request body on 307.
     func testHTTPRedirect_multipleIterationBehavior_succeeds() async throws {
@@ -218,6 +254,28 @@ func testHTTPRedirect(
     }
 }
 
+private func testRequestOverrides(transport: URLSessionTransport, withBody: Bool) async throws {
+    var transport = transport
+    let called = XCTestExpectation(description: "Request overrides evaluated for the operation")
+    called.assertForOverFulfill = true
+    transport.configuration.requestOverrides = { metadata in
+        XCTAssertEqual(metadata.operationID, "unused")
+        called.fulfill()
+        var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = true }
+        #endif
+        return overrides
+    }
+    if withBody {
+        try await testHTTPBasicPost(transport: transport)
+    } else {
+        try await testHTTPBasicGet(transport: transport)
+    }
+    let result = await XCTWaiter.fulfillment(of: [called], timeout: 1)
+    XCTAssertEqual(result, .completed)
+}
+
 func testHTTPBasicGet(transport: any ClientTransport) async throws {
     let requestPath = "/hello/world"
     let responseBodyMessage = "Hey!"
@@ -305,6 +363,84 @@ func testHTTPBasicPost(transport: any ClientTransport) async throws {
 #endif
 
 class URLSessionTransportPlatformSupportTests: XCTestCase {
+    func testRequestOverridesDefaults() {
+        XCTAssertNil(URLSessionTransport.Configuration().requestOverrides)
+        XCTAssertNil(URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered).requestOverrides)
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertNil(URLSessionTransport.Configuration.RequestOverrides.empty.assumesHTTP3Capable)
+        }
+        #endif
+    }
+
+    func testExistingInitializerReference() {
+        let makeConfiguration = URLSessionTransport.Configuration.init(session:httpBodyProcessingMode:)
+        let configuration = makeConfiguration(.shared, .buffered)
+        XCTAssertNil(configuration.requestOverrides)
+        let makeSessionConfiguration = URLSessionTransport.Configuration.init(session:)
+        XCTAssertNil(makeSessionConfiguration(.shared).requestOverrides)
+    }
+
+    func testOptionalRequestOverridesInitializer() throws {
+        let requestOverrides:
+            (
+                @Sendable (URLSessionTransport.Configuration.RequestMetadata) ->
+                    URLSessionTransport.Configuration.RequestOverrides
+            )? = nil
+        let configuration = URLSessionTransport.Configuration(requestOverrides: requestOverrides)
+        XCTAssertNil(configuration.requestOverrides)
+        XCTAssertNil(URLSessionTransport.Configuration(session: .shared, requestOverrides: nil).requestOverrides)
+        XCTAssertNil(
+            URLSessionTransport.Configuration(httpBodyProcessingMode: .buffered, requestOverrides: nil).requestOverrides
+        )
+        let configuredOverrides:
+            (
+                @Sendable (URLSessionTransport.Configuration.RequestMetadata) ->
+                    URLSessionTransport.Configuration.RequestOverrides
+            )? = { _ in
+                var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+                #if canImport(Darwin)
+                if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) { overrides.assumesHTTP3Capable = false }
+                #endif
+                return overrides
+            }
+        let session = URLSession(configuration: .ephemeral)
+        let configured = URLSessionTransport.Configuration(
+            session: session,
+            httpBodyProcessingMode: .buffered,
+            requestOverrides: configuredOverrides
+        )
+        XCTAssertTrue(configured.session === session)
+        guard case .buffering = configured.implementation else { return XCTFail("Expected buffering") }
+        let overrides = try XCTUnwrap(configured.requestOverrides)(.init(operationID: "getGreeting"))
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertEqual(overrides.assumesHTTP3Capable, false)
+        }
+        #endif
+    }
+
+    func testRequestOverridesInitializer() throws {
+        let configuration = URLSessionTransport.Configuration(requestOverrides: { metadata in
+            var overrides = URLSessionTransport.Configuration.RequestOverrides.empty
+            #if canImport(Darwin)
+            if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+                overrides.assumesHTTP3Capable = metadata.operationID == "getGreeting" ? true : nil
+            }
+            #endif
+            return overrides
+        })
+        let requestOverrides = try XCTUnwrap(configuration.requestOverrides)
+        let getOverrides = requestOverrides(.init(operationID: "getGreeting"))
+        let postOverrides = requestOverrides(.init(operationID: "postGreeting"))
+        #if canImport(Darwin)
+        if #available(macOS 11.3, iOS 14.5, tvOS 14.5, watchOS 7.4, *) {
+            XCTAssertEqual(getOverrides.assumesHTTP3Capable, true)
+            XCTAssertNil(postOverrides.assumesHTTP3Capable)
+        }
+        #endif
+    }
+
     func testDefaultsToStreamingIfSupported() {
         if URLSessionTransport.Configuration.Implementation.platformSupportsStreaming {
             guard case .streaming = URLSessionTransport.Configuration.Implementation.platformDefault else {
